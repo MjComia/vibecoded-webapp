@@ -1,0 +1,10 @@
+{
+  "description": "Enhance your study experience with interactive flashcards, customizable quizzes, and a visual study planner, all designed for efficient exam preparation.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

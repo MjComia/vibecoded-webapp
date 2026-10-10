@@ -1,0 +1,16 @@
+{
+  "name": "real-nurse",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI-powered board exam review platform for nursing licensure examinees",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "build": "npm --prefix frontend run build && npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "test": "npm --prefix backend test && npm --prefix frontend test",
+    "test:frontend": "npm --prefix frontend test",
+    "test:backend": "npm --prefix backend test"
+  }
+}
