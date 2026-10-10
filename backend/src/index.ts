@@ -6,6 +6,7 @@ import { taxonomyRouter } from "./routes/taxonomy.routes.js";
 import { profileRouter } from "./routes/profile.routes.js";
 import { quizRouter } from "./routes/quiz.routes.js";
 import { mockRouter } from "./routes/mock.routes.js";
+import { documentRouter } from "./routes/document.routes.js";
 
 const app = express();
 
@@ -21,6 +22,7 @@ app.use("/api/taxonomy", taxonomyRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/quiz", quizRouter);
 app.use("/api/mock", mockRouter);
+app.use("/api/documents", documentRouter);
 
 // Health Check & Diagnostics
 app.get("/api/health", (_req, res) => {

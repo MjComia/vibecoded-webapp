@@ -13,3 +13,10 @@ export const supabaseAdmin = config.supabaseServiceKey
       auth: { persistSession: false, autoRefreshToken: false },
     })
   : null;
+
+export const isSupabaseConfigured = Boolean(
+  config.supabaseUrl &&
+  !config.supabaseUrl.includes("placeholder") &&
+  config.supabaseAnonKey &&
+  !config.supabaseAnonKey.includes("placeholder")
+);
