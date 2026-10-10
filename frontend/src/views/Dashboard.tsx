@@ -1,6 +1,7 @@
 import { ArrowRight, Flame, Hourglass, Layers, UploadCloud, Zap, Timer, CheckCircle2, Circle, FileText, Presentation, Calculator, FlaskConical } from "lucide-react";
 import { useState } from "react";
 import { Card, Btn, Pill, Bar, Ring } from "../ui";
+import { useAuth } from "../context/AuthContext";
 
 const initialPlan = [
   { t: "Review 25 cardiac pharmacology flashcards", time: "08:30", done: true },
@@ -17,14 +18,24 @@ const focus = [
 ];
 
 export default function Dashboard({ go }: { go: (v: string) => void }) {
+  const { profile } = useAuth();
   const [plan, setPlan] = useState(initialPlan);
   const done = plan.filter((p) => p.done).length;
+
+  const firstName = profile.full_name?.split(" ")[0] || "Candidate";
+  const examDateObj = new Date(profile.exam_date || "2025-11-18");
+  const examDateFormatted = examDateObj.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  const daysRemaining = Math.max(0, Math.ceil((examDateObj.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
   return (
     <div className="space-y-10 rise">
       <header className="flex flex-wrap items-end justify-between gap-6">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold">Good morning, Sarah 👋</h1>
-          <p className="mt-3 text-ink-soft max-w-xl">Steady composure builds clinical confidence. Your target: <b className="text-rosetext">NCLEX-RN</b> · Nov 2025 intake.</p>
+          <h1 className="text-3xl md:text-4xl font-bold">Good morning, {firstName} 👋</h1>
+          <p className="mt-3 text-ink-soft max-w-xl">
+            Steady composure builds clinical confidence. Your target:{" "}
+            <b className="text-rosetext">{profile.target_exam}</b> · {examDateFormatted} intake.
+          </p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Btn onClick={() => go("docs")}><UploadCloud size={16} /> Upload notes</Btn>
@@ -40,13 +51,13 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
         </Card>
         <Card className="p-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Countdown</p>
-          <p className="mt-3 font-display text-5xl font-bold">87 <span className="text-base font-medium text-ink-soft">days left</span></p>
-          <p className="mt-3 text-sm text-rosetext font-semibold flex items-center gap-2"><Hourglass size={14} /> +4 days ahead of plan</p>
+          <p className="mt-3 font-display text-5xl font-bold">{daysRemaining} <span className="text-base font-medium text-ink-soft">days left</span></p>
+          <p className="mt-3 text-sm text-rosetext font-semibold flex items-center gap-2"><Hourglass size={14} /> On schedule for {profile.target_exam}</p>
         </Card>
         <Card className="p-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Consistency streak</p>
-          <p className="mt-3 font-display text-5xl font-bold flex items-center gap-2">14 <Flame className="text-amber" fill="#ffb86b" size={30} /></p>
-          <p className="mt-3 text-sm text-ink-soft">Personal best 21 days</p>
+          <p className="mt-3 font-display text-5xl font-bold flex items-center gap-2">{profile.streak_days} <Flame className="text-amber" fill="#ffb86b" size={30} /></p>
+          <p className="mt-3 text-sm text-ink-soft">Personal best {Math.max(21, profile.streak_days)} days</p>
         </Card>
         <Card className="p-6 bg-indigo text-white border-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-white/70">SRS queue today</p>

@@ -26,6 +26,8 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.13.9",
     "@types/pdf-parse": "^1.1.4",
+    "@types/supertest": "^7.2.1",
+    "supertest": "^7.3.1",
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.7"

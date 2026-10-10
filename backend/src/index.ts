@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import { config, validateEnv } from "./config/env.js";
 import { SRSService, CardRating } from "./services/srs.service.js";
+import { taxonomyRouter } from "./routes/taxonomy.routes.js";
+import { profileRouter } from "./routes/profile.routes.js";
 
 const app = express();
 
@@ -11,6 +13,10 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: "25mb" }));
+
+// Routes
+app.use("/api/taxonomy", taxonomyRouter);
+app.use("/api/profile", profileRouter);
 
 // Health Check & Diagnostics
 app.get("/api/health", (_req, res) => {
@@ -68,12 +74,14 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
   });
 });
 
-app.listen(config.port, () => {
-  console.log(`[Real Nurse API] Server running on port ${config.port} (${config.nodeEnv})`);
-  const envCheck = validateEnv();
-  if (envCheck.warnings.length > 0) {
-    console.log("[Config Warnings]:", envCheck.warnings);
-  }
-});
+if (process.env.NODE_ENV !== "test") {
+  app.listen(config.port, () => {
+    console.log(`[Real Nurse API] Server running on port ${config.port} (${config.nodeEnv})`);
+    const envCheck = validateEnv();
+    if (envCheck.warnings.length > 0) {
+      console.log("[Config Warnings]:", envCheck.warnings);
+    }
+  });
+}
 
 export default app;
