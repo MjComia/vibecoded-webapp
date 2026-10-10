@@ -1,0 +1,357 @@
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
+export async function generateAIQuiz(params: {
+  subject: string;
+  topic: string;
+  difficulty: string;
+  count: number;
+  sourceText?: string;
+}) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/quiz/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.quiz) return data.quiz.questions;
+    }
+  } catch (err) {
+    console.warn("[API] Backend quiz generation unreachable, using client generator:", err);
+  }
+
+  // Comprehensive client curriculum bank for offline/unreachable fallback
+  const CLIENT_SEED_BANK = [
+    // Psychiatric
+    {
+      id: "cl-psy-1",
+      stem: "A client who recently lost his job arrives home and yells at his spouse for leaving shoes by the doorway. Which defense mechanism is being exhibited?",
+      options: ["Displacement", "Projection", "Reaction Formation", "Sublimation"],
+      correct_answer_index: 0,
+      rationale: "Displacement redirects intense emotion from a threatening source (employer) to a safer target (spouse).",
+      clinical_tip: "Displacement = 'Kick the dog' when furious at the boss.",
+      subject: "Psychiatric",
+      topic: "Defense Mechanisms",
+      difficulty: "Foundation",
+    },
+    {
+      id: "cl-psy-2",
+      stem: "An employee who harbors unconscious resentment toward their supervisor excessively praises them to coworkers and brings them daily coffee. Which ego defense mechanism is demonstrated?",
+      options: ["Reaction Formation", "Rationalization", "Undoing", "Introjection"],
+      correct_answer_index: 0,
+      rationale: "Reaction formation involves adopting outward attitudes and behaviors that are the polar opposite of unacceptable internal impulses.",
+      clinical_tip: "Reaction formation = 'Killing with kindness' to mask hostile impulses.",
+      subject: "Psychiatric",
+      topic: "Defense Mechanisms",
+      difficulty: "Board-level",
+    },
+    {
+      id: "cl-psy-3",
+      stem: "A newly admitted client insists, 'The federal government has placed listening transmitters in my dental fillings.' What is the nurse's priority therapeutic response?",
+      options: [
+        "That sounds frightening. I don't see transmitters, but you are safe here.",
+        "Dentists do not implant government transmitters in fillings.",
+        "Why do you believe the government wants to spy on you?",
+        "If you take your antipsychotic pills, the voices and ideas will stop.",
+      ],
+      correct_answer_index: 0,
+      rationale: "Acknowledge the client's feelings and provide reassurance without validating or arguing delusional content.",
+      clinical_tip: "Validate the emotion, never argue or reinforce the delusion.",
+      subject: "Psychiatric",
+      topic: "Therapeutic Communication",
+      difficulty: "Board-level",
+    },
+    {
+      id: "cl-psy-4",
+      stem: "A bipolar client on Lithium Carbonate presents with coarse hand tremors, vomiting, ataxia, and confusion. Morning lithium level is 2.2 mEq/L. Priority action?",
+      options: [
+        "Hold lithium and prepare for emergency hemodialysis",
+        "Administer dose with meals to alleviate gastrointestinal distress",
+        "Advise the client to restrict dietary sodium and water",
+        "Recheck the serum level in 6 hours before intervening",
+      ],
+      correct_answer_index: 0,
+      rationale: "Lithium > 2.0 mEq/L indicates severe life-threatening toxicity requiring immediate hemodialysis.",
+      clinical_tip: "Therapeutic lithium is 0.6–1.2 mEq/L. Levels > 2.0 mEq/L are a medical emergency.",
+      subject: "Psychiatric",
+      topic: "Crisis Intervention",
+      difficulty: "Hard NGN",
+    },
+    // Pharmacology
+    {
+      id: "cl-pharm-1",
+      stem: "A client receiving IV heparin for pulmonary embolism has an aPTT of 118 seconds with new petechiae. Priority nursing intervention?",
+      options: [
+        "Stop the heparin infusion immediately and prepare Protamine Sulfate",
+        "Decrease infusion rate by 50% and re-evaluate in 4 hours",
+        "Administer Vitamin K intramuscularly and check INR",
+        "Reassure the client that petechiae are expected during therapy",
+      ],
+      correct_answer_index: 0,
+      rationale: "aPTT > 100 seconds indicates severe bleeding risk. Immediate cessation of heparin and protamine sulfate reversal is indicated.",
+      clinical_tip: "Heparin antidote is Protamine Sulfate; Warfarin antidote is Vitamin K.",
+      subject: "Pharmacology",
+      topic: "Anticoagulants",
+      difficulty: "Board-level",
+    },
+    {
+      id: "cl-pharm-2",
+      stem: "A client on Digoxin 0.25 mg daily reports blurred vision with yellow halos and nausea. Apical pulse is 48 bpm. What is the priority nursing action?",
+      options: [
+        "Hold the dose and notify the healthcare provider immediately",
+        "Administer the dose with orange juice to increase potassium",
+        "Recheck apical pulse in 2 hours before contacting the doctor",
+        "Encourage deep breathing exercises and bedrest",
+      ],
+      correct_answer_index: 0,
+      rationale: "Yellow halos, nausea, and bradycardia (< 60 bpm) indicate digitalis toxicity. Hold medication and notify physician.",
+      clinical_tip: "Digoxin toxicity: Check apical pulse 1 full minute. Yellow-green halos are classic.",
+      subject: "Pharmacology",
+      topic: "Cardiac Glycosides",
+      difficulty: "Foundation",
+    },
+    {
+      id: "cl-pharm-3",
+      stem: "At 07:30 AM, a client receives 20 units of NPH insulin subcutaneously. At what time should the nurse monitor most closely for peak hypoglycemia?",
+      options: [
+        "Between 01:30 PM and 05:30 PM (6 to 10 hours)",
+        "Between 08:00 AM and 09:00 AM (30 to 60 minutes)",
+        "Between 09:30 AM and 11:30 AM (2 to 4 hours)",
+        "At 10:00 PM (14 to 16 hours)",
+      ],
+      correct_answer_index: 0,
+      rationale: "NPH is intermediate-acting and peaks between 4 and 12 hours (typically 6–8 hours post-injection).",
+      clinical_tip: "NPH = Not Particularly Hasty (intermediate, peaks in 4–12 hours).",
+      subject: "Pharmacology",
+      topic: "Insulin & Hypoglycemics",
+      difficulty: "Board-level",
+    },
+    // Med-Surg
+    {
+      id: "cl-ms-1",
+      stem: "Arterial blood gas values for a client with COPD: pH 7.31, PaCO2 58 mmHg, HCO3 29 mEq/L, PaO2 62 mmHg. Which interpretation is correct?",
+      options: [
+        "Partially compensated respiratory acidosis",
+        "Uncompensated metabolic acidosis",
+        "Fully compensated respiratory alkalosis",
+        "Uncompensated respiratory acidosis",
+      ],
+      correct_answer_index: 0,
+      rationale: "pH < 7.35 is acidotic, PaCO2 > 45 is respiratory origin, HCO3 > 26 is renal compensation attempt. pH not normal = partially compensated.",
+      clinical_tip: "ROME: Respiratory Opposite (pH low, PaCO2 high). When HCO3 moves to compensate, it's partially compensated.",
+      subject: "Med-Surg",
+      topic: "ABG Interpretation",
+      difficulty: "Hard NGN",
+    },
+    {
+      id: "cl-ms-2",
+      stem: "12 hours after subtotal thyroidectomy, a client reports perioral numbness. Inflating a blood pressure cuff produces carpopedal spasm. What complication is present?",
+      options: [
+        "Acute hypocalcemia from parathyroid trauma (Trousseau's sign)",
+        "Thyroid storm with sympathetic crisis",
+        "Recurrent laryngeal nerve paralysis",
+        "Hypermagnesemia from surgical IV fluid overload",
+      ],
+      correct_answer_index: 0,
+      rationale: "Carpopedal spasm upon BP cuff inflation (Trousseau's sign) indicates acute hypocalcemia from parathyroid gland disruption.",
+      clinical_tip: "Keep IV Calcium Gluconate at bedside following thyroid surgery.",
+      subject: "Med-Surg",
+      topic: "Fluid & Electrolytes",
+      difficulty: "Board-level",
+    },
+    // Maternal & Child
+    {
+      id: "cl-mc-1",
+      stem: "A 34-week preeclamptic client receives IV Magnesium Sulfate. Which assessment finding mandates immediate discontinuation of the infusion?",
+      options: [
+        "Respirations 10 breaths/min and absent patellar reflexes",
+        "Deep tendon reflexes 2+ and urine output 40 mL/hr",
+        "Blood pressure 142/90 mmHg",
+        "Fetal heart rate baseline 136 bpm",
+      ],
+      correct_answer_index: 0,
+      rationale: "Bradypnea (< 12/min) and loss of deep tendon reflexes indicate life-threatening hypermagnesemia.",
+      clinical_tip: "BURP: BP, Urine > 30 mL/hr, Respirations > 12/min, Patellar reflex present.",
+      subject: "Maternal & Child",
+      topic: "Preeclampsia & HELLP",
+      difficulty: "Board-level",
+    },
+    // Fundamentals & Ethics
+    {
+      id: "cl-fe-1",
+      stem: "Under Philippine Republic Act 9173, who is authorized to administer intravenous medications in nursing practice?",
+      options: [
+        "A registered nurse certified under PRC-BON IV therapy training standards",
+        "Any graduate registered nurse immediately upon passing the licensure exam",
+        "A licensed practical nurse under direct bedside supervision",
+        "Senior nursing students without special board certification",
+      ],
+      correct_answer_index: 0,
+      rationale: "RA 9173 requires registered nurses administering IV therapy to complete PRC-BON certified IV training.",
+      clinical_tip: "RA 9173 mandates certified training for IV medication administration in the Philippines.",
+      subject: "Fundamentals & Ethics",
+      topic: "RA 9173 & Law",
+      difficulty: "Board-level",
+    },
+    {
+      id: "cl-fe-2",
+      stem: "Applying triage prioritization frameworks (ABCs and Maslow), which client must be assessed first?",
+      options: [
+        "A client with acute stridor and angioedema after a wasp sting",
+        "A post-op client with surgical wound pain rated 8/10",
+        "A diabetic client with pre-meal blood glucose 240 mg/dL without ketones",
+        "A client with a closed wrist fracture awaiting splinting",
+      ],
+      correct_answer_index: 0,
+      rationale: "Stridor indicates acute upper airway obstruction. Airway always takes priority over pain or stable vitals.",
+      clinical_tip: "Airway > Breathing > Circulation (ABCs) trumps pain and stable chronic conditions.",
+      subject: "Fundamentals & Ethics",
+      topic: "Prioritization Frameworks",
+      difficulty: "Board-level",
+    },
+  ];
+
+  const matchedBySubject = CLIENT_SEED_BANK.filter(
+    (q) => q.subject.toLowerCase() === params.subject.toLowerCase()
+  );
+  const matchedByTopic = matchedBySubject.filter(
+    (q) =>
+      q.topic.toLowerCase().includes(params.topic.toLowerCase()) ||
+      params.topic.toLowerCase().includes(q.topic.toLowerCase())
+  );
+
+  const pool =
+    matchedByTopic.length > 0
+      ? matchedByTopic
+      : matchedBySubject.length > 0
+      ? matchedBySubject
+      : CLIENT_SEED_BANK;
+
+  const results = [];
+  for (let i = 0; i < params.count; i++) {
+    const base = pool[i % pool.length];
+    results.push({
+      ...base,
+      id: `client-q-${Date.now()}-${i}`,
+      subject: params.subject,
+      topic: params.topic,
+      difficulty: params.difficulty,
+    });
+  }
+  return results;
+}
+
+export async function startMockExamSession(params: {
+  examType: "NCLEX-RN" | "NLE";
+  durationMinutes: number;
+  itemCount: number;
+  sourceText?: string;
+}) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/mock/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) return data;
+    }
+  } catch (err) {
+    console.warn("[API] Mock start endpoint unreachable, using client session:", err);
+  }
+
+  // Client fallback simulation
+  const now = Date.now();
+  return {
+    success: true,
+    attemptId: `local-mock-${now}`,
+    examType: params.examType,
+    durationMinutes: params.durationMinutes,
+    expiresAt: now + params.durationMinutes * 60 * 1000,
+    serverTime: now,
+    allowBacktracking: params.examType === "NLE",
+    questions: [
+      {
+        id: "m-1",
+        stem: "A client with acute myocardial infarction develops sudden dyspnea, tachycardia, and pink frothy sputum. What is the priority nursing intervention?",
+        options: [
+          "Place in high Fowler's position and administer high-flow oxygen",
+          "Lay client flat and elevate the lower extremities",
+          "Administer sublingual nitroglycerin and leave to rest",
+          "Perform a 12-lead ECG immediately before any other action",
+        ],
+        subject: "Med-Surg",
+        topic: "Oxygenation & Cardiac",
+        difficulty: "Board-level",
+      },
+      {
+        id: "m-2",
+        stem: "A post-thyroidectomy client develops perioral tingling and positive Chvostek's sign. Which emergency IV medication must be prepared?",
+        options: ["Potassium Chloride", "Calcium Gluconate", "Sodium Bicarbonate", "Magnesium Sulfate"],
+        subject: "Med-Surg",
+        topic: "Fluid & Electrolytes",
+        difficulty: "Board-level",
+      },
+      {
+        id: "m-3",
+        stem: "Under Philippine RA 9173, who is authorized to administer IV medications under nursing practice?",
+        options: [
+          "Any licensed RN who has completed basic nursing school training",
+          "A licensed RN certified under PRC-BON IV Therapy Training Standards",
+          "A licensed Practical Nurse under direct supervision of an RN",
+          "Nursing students under clinical instructors without special certification",
+        ],
+        subject: "Fundamentals & Ethics",
+        topic: "RA 9173 & Law",
+        difficulty: "Board-level",
+      },
+      {
+        id: "m-4",
+        stem: "Which lab finding in a pregnant client at 32 weeks receiving IV magnesium sulfate warrants immediate discontinuation of the infusion?",
+        options: [
+          "Absent patellar reflexes and respirations 10/min",
+          "Deep tendon reflexes 2+ and urine output 50 mL/hr",
+          "BP 138/86 mmHg and trace pedal edema",
+          "Serum magnesium level of 5 mg/dL",
+        ],
+        subject: "Maternal & Child",
+        topic: "Preeclampsia",
+        difficulty: "Board-level",
+      },
+    ],
+  };
+}
+
+export async function autosaveMockAnswer(
+  attemptId: string,
+  payload: { questionId: string; selectedOption?: number; isFlagged?: boolean }
+) {
+  try {
+    await fetch(`${API_BASE_URL}/api/mock/${attemptId}/save-answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    // Non-blocking autosave
+  }
+}
+
+export async function submitMockExamAttempt(attemptId: string) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/mock/${attemptId}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) return data;
+    }
+  } catch (err) {
+    console.warn("[API] Mock submit endpoint unreachable:", err);
+  }
+
+  return null;
+}

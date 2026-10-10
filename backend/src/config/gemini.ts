@@ -13,5 +13,5 @@ export function getGeminiClient(): GoogleGenerativeAI {
   return genAIInstance;
 }
 
-// Default recommended model for reasoning & structured JSON outputs
-export const GEMINI_MODEL = "gemini-1.5-flash";
+// Default recommended model for clinical reasoning & fast structured JSON generation
+export const GEMINI_MODEL = "gemini-3.5-flash-lite";

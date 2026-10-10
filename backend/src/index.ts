@@ -4,11 +4,13 @@ import { config, validateEnv } from "./config/env.js";
 import { SRSService, CardRating } from "./services/srs.service.js";
 import { taxonomyRouter } from "./routes/taxonomy.routes.js";
 import { profileRouter } from "./routes/profile.routes.js";
+import { quizRouter } from "./routes/quiz.routes.js";
+import { mockRouter } from "./routes/mock.routes.js";
 
 const app = express();
 
 app.use(cors({
-  origin: [config.clientUrl, "http://localhost:5173", "http://localhost:3000"],
+  origin: [config.clientUrl, "http://localhost:5173", "http://localhost:8443", "http://localhost:3000"],
   credentials: true,
 }));
 
@@ -17,6 +19,8 @@ app.use(express.json({ limit: "25mb" }));
 // Routes
 app.use("/api/taxonomy", taxonomyRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/quiz", quizRouter);
+app.use("/api/mock", mockRouter);
 
 // Health Check & Diagnostics
 app.get("/api/health", (_req, res) => {

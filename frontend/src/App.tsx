@@ -61,7 +61,7 @@ function AppContent() {
     dash: <Dashboard go={go} />,
     flashcards: <Flashcards />,
     quiz: <Quiz />,
-    plan: <Plan />,
+    plan: <Plan go={go} />,
     tasks: <Tasks go={go} />,
     pomodoro: <Pomodoro />,
     analytics: <Analytics />,

@@ -1,51 +1,487 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Card, PageHead, Pill } from "../ui";
+import { useState, useMemo } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Settings2,
+  Calendar as CalendarIcon,
+  Clock,
+  Sparkles,
+  ArrowRight,
+  CheckCircle2,
+  X,
+  RotateCcw,
+} from "lucide-react";
+import { Card, PageHead, Pill, Btn } from "../ui";
+import {
+  generateStudyPlan,
+  KIND_TONES,
+  defaultSubjects,
+  type PlannerConfig,
+  type StudyDayKind,
+  type DaySchedule,
+} from "../lib/planner";
+import { useAuth } from "../context/AuthContext";
 
-const examDate = new Date(2025, 10, 18);
-const kinds = ["Flashcards", "Reading", "Practice test", "Quiz", "Rest"];
-const tone = ["bg-teal-tint text-rosetext", "bg-lav text-indigo", "bg-[#ffe8cf] text-[#8d4b00]", "bg-lav-deep text-indigo", "bg-canvas text-ink-soft"];
+export default function Plan({ go }: { go?: (v: string) => void }) {
+  const { profile } = useAuth();
 
-export default function Plan() {
-  const [month, setMonth] = useState(new Date(2025, 10, 1));
-  const [sel, setSel] = useState(new Date(2025, 10, 6));
-  const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-  const cells = [...Array(first.getDay()).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
-  const plan = (d: number) => (d % 7 === 0 ? 4 : d % 5 === 0 ? 2 : d % 3 === 0 ? 1 : d % 2 === 0 ? 0 : 3);
-  const isExam = (d: number) => month.getMonth() === examDate.getMonth() && d === examDate.getDate();
-  const k = plan(sel.getDate());
-  const daysLeft = Math.ceil((examDate.getTime() - sel.getTime()) / 864e5);
+  // Planner Configuration
+  const [config, setConfig] = useState<PlannerConfig>(() => {
+    const saved = localStorage.getItem("real_nurse_planner_config");
+    if (saved) return JSON.parse(saved);
+
+    return {
+      examDate: profile.exam_date || "2025-11-18",
+      hoursPerDay: Math.max(1, Math.round((profile.daily_goal_minutes || 60) / 60)),
+      restDayMode: "sunday",
+      customRestDays: [0], // Sunday
+      weakSubjects: ["Pharmacology", "Med-Surg"],
+      mockSprintWeeks: 2,
+      examType: profile.target_exam || "NCLEX-RN",
+    };
+  });
+
+  // Manual Overrides (e.g. specific rescheduled days)
+  const [overrides, setOverrides] = useState<Record<string, StudyDayKind>>(() => {
+    const saved = localStorage.getItem("real_nurse_planner_overrides");
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  // Calendar view navigation
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+
+  // Selected date
+  const [selectedDateStr, setSelectedDateStr] = useState<string>(() => {
+    const d = new Date();
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  });
+
+  // Modal toggle for custom plan options
+  const [showConfigModal, setShowConfigModal] = useState(false);
+
+  // Generate backward schedule
+  const studyPlan = useMemo(() => {
+    return generateStudyPlan(config, new Date(), overrides);
+  }, [config, overrides]);
+
+  const saveConfig = (newConfig: PlannerConfig) => {
+    setConfig(newConfig);
+    localStorage.setItem("real_nurse_planner_config", JSON.stringify(newConfig));
+  };
+
+  const saveOverrides = (newOverrides: Record<string, StudyDayKind>) => {
+    setOverrides(newOverrides);
+    localStorage.setItem("real_nurse_planner_overrides", JSON.stringify(newOverrides));
+  };
+
+  // Month grid calculations
+  const year = currentMonth.getFullYear();
+  const monthIdx = currentMonth.getMonth();
+  const firstDayOfWeek = new Date(year, monthIdx, 1).getDay();
+  const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+  const cells = [...Array(firstDayOfWeek).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  // Active selected day schedule
+  const selectedDaySchedule: DaySchedule | undefined = studyPlan[selectedDateStr] || {
+    dateStr: selectedDateStr,
+    dayNumber: parseInt(selectedDateStr.split("-")[2], 10) || 1,
+    kind: "Reading",
+    subject: "Pharmacology",
+    topic: "Clinical Concepts",
+    targetMinutes: config.hoursPerDay * 60,
+    activities: ["Spaced review and reading"],
+    isExamDay: false,
+  };
+
+  const examDateObj = new Date(config.examDate + "T00:00:00");
+  const selectedDateObj = new Date(selectedDateStr + "T00:00:00");
+  const daysLeft = Math.ceil((examDateObj.getTime() - selectedDateObj.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Handle rescheduling active day
+  const handleRescheduleKind = (newKind: StudyDayKind) => {
+    const updated = { ...overrides, [selectedDateStr]: newKind };
+    saveOverrides(updated);
+  };
+
+  const handleResetSchedule = () => {
+    saveOverrides({});
+  };
+
+  // Action launcher mapping
+  const launchActivity = (kind: StudyDayKind) => {
+    if (!go) return;
+    if (kind === "Flashcards") go("flashcards");
+    else if (kind === "Quiz" || kind === "Practice test") go("quiz");
+    else if (kind === "Mock exam") go("mock");
+    else if (kind === "Reading") go("docs");
+  };
 
   return (
-    <div className="rise">
-      <PageHead eyebrow="Backward-planned" title="Study plan & calendar" sub="Your schedule works backward from exam day, front-loading weak topics." />
+    <div className="rise space-y-8">
+      <PageHead
+        eyebrow="Customizable Backward-Planning"
+        title="Study Plan & Calendar"
+        sub="Your personal review roadmap engineered backward from exam day. Custom tailored to your daily available hours and weak subjects."
+        action={
+          <Btn onClick={() => setShowConfigModal(true)} variant="soft" className="flex items-center gap-2">
+            <Settings2 size={16} /> Customize Schedule
+          </Btn>
+        }
+      />
+
       <div className="grid gap-8 xl:grid-cols-[1.6fr_1fr]">
+        {/* Left Calendar Grid Card */}
         <Card className="p-6 md:p-8">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold">{month.toLocaleString("en", { month: "long", year: "numeric" })}</h2>
-            <div className="flex gap-2">{[-1, 1].map((d) => <button key={d} aria-label={d < 0 ? "Previous month" : "Next month"} onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + d, 1))} className="size-10 grid place-items-center rounded-full bg-lav hover:bg-lav-deep">{d < 0 ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}</button>)}</div>
-          </div>
-          <div className="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-ink-soft mb-2">{["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <span key={i}>{d}</span>)}</div>
-          <div className="grid grid-cols-7 gap-2">
-            {cells.map((d, i) => d === null ? <span key={i} /> : (
-              <button key={i} onClick={() => setSel(new Date(month.getFullYear(), month.getMonth(), d))} className={`aspect-square rounded-2xl text-sm font-semibold flex flex-col items-center justify-center gap-1 transition-colors ${isExam(d) ? "bg-danger text-white" : sel.getDate() === d && sel.getMonth() === month.getMonth() ? "bg-teal text-ink" : tone[plan(d)] + " hover:ring-2 ring-teal/40"}`}>
-                {d}{isExam(d) && <span className="text-[9px] uppercase tracking-wider">Exam</span>}
+            <div>
+              <h2 className="text-xl font-bold font-display">
+                {currentMonth.toLocaleString("en-US", { month: "long", year: "numeric" })}
+              </h2>
+              <p className="text-xs text-ink-soft mt-0.5">
+                Target: {config.examType} on {new Date(config.examDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                aria-label="Previous month"
+                onClick={() => setCurrentMonth(new Date(year, monthIdx - 1, 1))}
+                className="size-9 grid place-items-center rounded-full bg-lav hover:bg-lav-deep text-ink-soft transition-colors"
+              >
+                <ChevronLeft size={16} />
               </button>
+              <button
+                aria-label="Next month"
+                onClick={() => setCurrentMonth(new Date(year, monthIdx + 1, 1))}
+                className="size-9 grid place-items-center rounded-full bg-lav hover:bg-lav-deep text-ink-soft transition-colors"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Weekday Header */}
+          <div className="grid grid-cols-7 gap-2 text-center text-xs font-bold text-ink-soft mb-2">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d, i) => (
+              <span key={i}>{d}</span>
             ))}
           </div>
-          <div className="mt-6 flex flex-wrap gap-3">{kinds.map((n, i) => <span key={n} className={`rounded-full px-3 py-1 text-xs font-semibold ${tone[i]}`}>{n}</span>)}</div>
+
+          {/* Calendar Cells */}
+          <div className="grid grid-cols-7 gap-2">
+            {cells.map((d, i) => {
+              if (d === null) return <span key={i} className="aspect-square" />;
+
+              const mmStr = String(monthIdx + 1).padStart(2, "0");
+              const ddStr = String(d).padStart(2, "0");
+              const cellDateStr = `${year}-${mmStr}-${ddStr}`;
+              const daySchedule = studyPlan[cellDateStr];
+
+              const isSelected = selectedDateStr === cellDateStr;
+              const isExam = cellDateStr === config.examDate;
+              const kind = daySchedule?.kind || "Reading";
+              const isRescheduled = daySchedule?.isRescheduled;
+
+              return (
+                <button
+                  key={i}
+                  onClick={() => setSelectedDateStr(cellDateStr)}
+                  className={`aspect-square rounded-2xl text-xs sm:text-sm font-semibold flex flex-col items-center justify-center relative transition-all ${
+                    isExam
+                      ? "bg-danger text-white ring-2 ring-danger"
+                      : isSelected
+                      ? "bg-teal text-ink ring-2 ring-rosetext/80 shadow-md scale-105 z-10"
+                      : `${KIND_TONES[kind]} hover:ring-2 hover:ring-teal/50`
+                  }`}
+                >
+                  <span className="font-bold">{d}</span>
+                  {isExam ? (
+                    <span className="text-[8px] uppercase tracking-wider font-extrabold mt-0.5">EXAM</span>
+                  ) : (
+                    <span className="text-[9px] opacity-75 truncate max-w-[90%] font-medium">
+                      {kind === "Practice test" ? "Test" : kind === "Mock exam" ? "Mock" : kind}
+                    </span>
+                  )}
+                  {isRescheduled && (
+                    <span className="absolute top-1 right-1.5 size-1.5 rounded-full bg-indigo" title="Custom rescheduled" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="mt-8 pt-6 border-t border-line flex flex-wrap gap-2.5">
+            {(Object.keys(KIND_TONES) as StudyDayKind[]).map((k) => (
+              <span key={k} className={`rounded-full px-3 py-1 text-xs font-semibold ${KIND_TONES[k]}`}>
+                {k}
+              </span>
+            ))}
+          </div>
         </Card>
-        <Card className="p-8 h-fit">
-          <p className="text-xs font-semibold uppercase tracking-wider text-rosetext">{sel.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}</p>
-          <h2 className="mt-2 text-2xl font-bold">{kinds[k]} day</h2>
-          <p className="mt-2 text-sm text-ink-soft">{daysLeft > 0 ? `${daysLeft} days before exam` : daysLeft === 0 ? "Exam day. You've got this." : "Past exam date"}</p>
-          <ul className="mt-6 space-y-3">
-            {["Warm-up: 20 SRS cards", `Core: ${kinds[k].toLowerCase()} session · 45 min`, "Cooldown: review mistakes"].map((t) => <li key={t} className="rounded-2xl bg-canvas px-4 py-3.5 text-sm font-medium">{t}</li>)}
-          </ul>
-          <div className="mt-6"><Pill tone="teal">Auto-adjusted</Pill></div>
+
+        {/* Right Detail & Reschedule Inspector */}
+        <Card className="p-6 md:p-8 flex flex-col justify-between h-fit">
+          <div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-rosetext">
+                {selectedDateObj.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+              </p>
+              <Pill tone={selectedDaySchedule.kind === "Rest" ? "lav" : "teal"}>
+                {selectedDaySchedule.kind}
+              </Pill>
+            </div>
+
+            <h2 className="mt-3 text-2xl font-bold font-display leading-snug">
+              {selectedDaySchedule.isExamDay
+                ? "Official Board Exam Day"
+                : `${selectedDaySchedule.subject}`}
+            </h2>
+
+            {!selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" && (
+              <p className="text-xs font-semibold text-rosetext mt-1">
+                Topic Focus: {selectedDaySchedule.topic}
+              </p>
+            )}
+
+            <div className="mt-3 flex items-center gap-3 text-xs text-ink-soft">
+              <span className="flex items-center gap-1 font-semibold">
+                <Clock size={13} className="text-rosetext" />
+                {selectedDaySchedule.targetMinutes} minutes planned
+              </span>
+              <span>·</span>
+              <span className="font-semibold text-rosetext">
+                {daysLeft > 0 ? `${daysLeft} days until exam` : daysLeft === 0 ? "Exam Day" : "Past Exam"}
+              </span>
+            </div>
+
+            {/* Curriculum Activities */}
+            <div className="mt-6 space-y-2.5">
+              <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Scheduled Curriculum</p>
+              {selectedDaySchedule.activities.map((act, idx) => (
+                <div key={idx} className="p-3.5 rounded-2xl bg-canvas border border-line flex items-start gap-3">
+                  <CheckCircle2 size={16} className="text-rosetext shrink-0 mt-0.5" />
+                  <span className="text-xs font-medium leading-relaxed text-ink">{act}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Quick Reschedule Options */}
+            {!selectedDaySchedule.isExamDay && (
+              <div className="mt-6 pt-5 border-t border-line">
+                <label className="block text-xs font-semibold text-ink-soft mb-2">
+                  Reschedule This Day:
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(["Flashcards", "Reading", "Quiz", "Practice test", "Rest"] as StudyDayKind[]).map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => handleRescheduleKind(k)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-semibold border transition-all ${
+                        selectedDaySchedule.kind === k
+                          ? "bg-teal text-ink border-teal font-bold"
+                          : "bg-white text-ink-soft border-line hover:bg-lav"
+                      }`}
+                    >
+                      {k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Action Launch Button */}
+          <div className="mt-8 pt-5 border-t border-line flex items-center justify-between gap-3">
+            {!selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" ? (
+              <Btn
+                onClick={() => launchActivity(selectedDaySchedule.kind)}
+                className="w-full py-3 text-xs font-bold"
+              >
+                Launch {selectedDaySchedule.kind} Session <ArrowRight size={14} />
+              </Btn>
+            ) : selectedDaySchedule.kind === "Rest" ? (
+              <span className="text-xs font-medium text-ink-soft italic w-full text-center">
+                Rest days are critical for memory consolidation.
+              </span>
+            ) : null}
+          </div>
         </Card>
       </div>
+
+      {/* Customize Study Schedule Modal */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm animate-fadeIn">
+          <Card className="w-full max-w-lg p-6 sm:p-8 bg-white relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowConfigModal(false)}
+              className="absolute top-5 right-5 size-8 rounded-full bg-lav hover:bg-lav-deep grid place-items-center text-ink-soft"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles size={18} className="text-rosetext" />
+              <h3 className="font-display font-bold text-xl">Customize Study Plan</h3>
+            </div>
+            <p className="text-xs text-ink-soft mb-6">
+              Tailor the backward-planning engine to your daily routine, work schedule, and weak clinical areas.
+            </p>
+
+            <div className="space-y-5">
+              {/* Exam Date */}
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-1.5 flex items-center gap-1.5">
+                  <CalendarIcon size={13} className="text-rosetext" /> Target Board Exam Date
+                </label>
+                <input
+                  type="date"
+                  value={config.examDate}
+                  onChange={(e) => setConfig({ ...config, examDate: e.target.value })}
+                  className="w-full rounded-2xl border border-line bg-canvas p-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal font-medium"
+                />
+              </div>
+
+              {/* Hours per day */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-semibold text-ink-soft">Daily Study Time Target</label>
+                  <span className="text-xs font-bold text-rosetext">{config.hoursPerDay} hours / day</span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  step={1}
+                  value={config.hoursPerDay}
+                  onChange={(e) => setConfig({ ...config, hoursPerDay: parseInt(e.target.value, 10) })}
+                  className="w-full accent-teal cursor-pointer"
+                />
+                <div className="flex justify-between text-[10px] text-ink-soft mt-1">
+                  <span>1 hr (Light review)</span>
+                  <span>4 hrs (Full prep)</span>
+                  <span>8 hrs (Intensive bootcamp)</span>
+                </div>
+              </div>
+
+              {/* Rest Day Options */}
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-2">Rest Day Schedule</label>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    { id: "sunday", label: "Sundays Off (1 day/wk)" },
+                    { id: "saturday", label: "Saturdays Off (1 day/wk)" },
+                    { id: "none", label: "7 Days Continuous (No Rest)" },
+                    { id: "custom", label: "Custom Schedule" },
+                  ].map((opt) => (
+                    <button
+                      type="button"
+                      key={opt.id}
+                      onClick={() => setConfig({ ...config, restDayMode: opt.id as any })}
+                      className={`p-3 rounded-2xl border text-left font-semibold transition-all ${
+                        config.restDayMode === opt.id
+                          ? "bg-teal-tint border-teal text-rosetext ring-1 ring-teal"
+                          : "bg-canvas border-line text-ink-soft hover:bg-lav"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Rest Days Picker (When custom selected) */}
+              {config.restDayMode === "custom" && (
+                <div className="p-3 rounded-2xl bg-canvas border border-line">
+                  <p className="text-[11px] font-semibold text-ink-soft mb-2">Select Days You Want Off:</p>
+                  <div className="flex justify-between gap-1">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName, idx) => {
+                      const isOff = config.customRestDays.includes(idx);
+                      return (
+                        <button
+                          key={dayName}
+                          type="button"
+                          onClick={() => {
+                            const newDays = isOff
+                              ? config.customRestDays.filter((d) => d !== idx)
+                              : [...config.customRestDays, idx];
+                            setConfig({ ...config, customRestDays: newDays });
+                          }}
+                          className={`size-9 rounded-full text-xs font-bold transition-all ${
+                            isOff ? "bg-rosetext text-white shadow-sm" : "bg-white border border-line text-ink-soft"
+                          }`}
+                        >
+                          {dayName.charAt(0)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Weak Subjects Front-Loading */}
+              <div>
+                <label className="block text-xs font-semibold text-ink-soft mb-2">
+                  Weak Clinical Areas to Prioritize (Front-Loaded in Early Weeks):
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {defaultSubjects.map((subj) => {
+                    const isSelected = config.weakSubjects.includes(subj);
+                    return (
+                      <button
+                        type="button"
+                        key={subj}
+                        onClick={() => {
+                          const updated = isSelected
+                            ? config.weakSubjects.filter((s) => s !== subj)
+                            : [...config.weakSubjects, subj];
+                          setConfig({ ...config, weakSubjects: updated });
+                        }}
+                        className={`p-2.5 rounded-2xl border text-left text-xs font-semibold transition-all flex items-center justify-between ${
+                          isSelected
+                            ? "bg-teal-tint border-teal text-rosetext font-bold"
+                            : "bg-canvas border-line text-ink-soft hover:bg-lav"
+                        }`}
+                      >
+                        <span>{subj}</span>
+                        {isSelected && <Pill tone="teal">Priority</Pill>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Reset Overrides Action */}
+              {Object.keys(overrides).length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleResetSchedule}
+                  className="text-xs text-danger font-semibold flex items-center gap-1.5 hover:underline"
+                >
+                  <RotateCcw size={13} /> Reset {Object.keys(overrides).length} custom rescheduled days
+                </button>
+              )}
+
+              <Btn
+                onClick={() => {
+                  saveConfig(config);
+                  setShowConfigModal(false);
+                }}
+                className="w-full py-3.5 text-xs font-bold mt-2"
+              >
+                Regenerate Backward Plan
+              </Btn>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
