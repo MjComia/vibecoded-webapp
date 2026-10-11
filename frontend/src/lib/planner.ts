@@ -22,6 +22,12 @@ export interface PlannerConfig {
   examType: "NCLEX-RN" | "NLE";
 }
 
+export function getDefaultExamDate(): string {
+  const target = new Date();
+  target.setDate(target.getDate() + 60);
+  return target.toISOString().split("T")[0];
+}
+
 export const defaultSubjects = [
   "Pharmacology",
   "Med-Surg",

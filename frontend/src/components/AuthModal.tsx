@@ -1,31 +1,52 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Sparkles, LogIn, UserPlus, Stethoscope, Calendar, Clock } from "lucide-react";
 import { Card, Btn, Pill } from "../ui";
 import { useAuth } from "../context/AuthContext";
+import { getDefaultExamDate } from "../lib/planner";
 
-export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  initialMode?: "signin" | "signup";
+}
+
+export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: AuthModalProps) {
   const { signIn, signUp, profile } = useAuth();
-  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [targetExam, setTargetExam] = useState<"NCLEX-RN" | "NLE">(profile.target_exam || "NCLEX-RN");
-  const [examDate, setExamDate] = useState("2025-11-18");
+  const [examDate, setExamDate] = useState(profile.exam_date || getDefaultExamDate());
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setError("");
+      setNotice("");
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setNotice("");
     setLoading(true);
 
     try {
       if (mode === "signin") {
         const res = await signIn(email, password);
         if (res.error) {
-          setError(res.error);
+          if (res.error.toLowerCase().includes("email not confirmed")) {
+            setError("Email not confirmed. Please check your inbox or turn off 'Confirm email' in Supabase Auth -> Providers -> Email.");
+          } else {
+            setError(res.error);
+          }
         } else {
           onClose();
         }
@@ -35,9 +56,12 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
           setLoading(false);
           return;
         }
-        const res = await signUp(email, password, fullName, targetExam, examDate);
+        const res = (await signUp(email, password, fullName, targetExam, examDate)) as any;
         if (res.error) {
           setError(res.error);
+        } else if (res.notice) {
+          setNotice(res.notice);
+          setMode("signin");
         } else {
           onClose();
         }
@@ -91,6 +115,12 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
             <LogIn size={14} /> Sign In
           </button>
         </div>
+
+        {notice && (
+          <div className="mb-5 p-3.5 rounded-2xl bg-teal-tint text-rosetext text-xs font-semibold leading-relaxed border border-teal">
+            {notice}
+          </div>
+        )}
 
         {error && (
           <div className="mb-5 p-3.5 rounded-2xl bg-[#ffdad6] text-[#93000a] text-xs font-medium leading-relaxed">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   RotateCw,
   Plus,
@@ -9,6 +9,11 @@ import {
   BookOpen,
   Calendar,
   X,
+  UploadCloud,
+  FileText,
+  Trash2,
+  FolderOpen,
+  AlertCircle,
 } from "lucide-react";
 import { Card, PageHead, Pill, Bar, Btn } from "../ui";
 import {
@@ -17,6 +22,12 @@ import {
   createNewCard,
   type CardRating,
 } from "../lib/srs";
+import {
+  fetchStudyDocuments,
+  uploadStudyDocument,
+  generateFlashcardsFromDoc,
+  StudyDocument,
+} from "../lib/api";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import type { Card as FSRSCard } from "ts-fsrs";
@@ -157,7 +168,11 @@ const initialDecks: DeckItem[] = [
   },
 ];
 
-export default function Flashcards() {
+interface FlashcardsProps {
+  go?: (v: string) => void;
+}
+
+export default function Flashcards({ go }: FlashcardsProps) {
   const { user } = useAuth();
   const [decks, setDecks] = useState<DeckItem[]>(() => {
     const saved = localStorage.getItem("real_nurse_decks");
@@ -180,6 +195,137 @@ export default function Flashcards() {
   const [newBack, setNewBack] = useState("");
   const [newExplanation, setNewExplanation] = useState("");
   const [newMnemonic, setNewMnemonic] = useState("");
+
+  // Document file-based custom deck creation
+  const [showDocDeckModal, setShowDocDeckModal] = useState(false);
+  const [docs, setDocs] = useState<StudyDocument[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
+  const [newDeckTitle, setNewDeckTitle] = useState("");
+  const [newDeckCategory, setNewDeckCategory] = useState("Pharmacology");
+  const [newDeckExam, setNewDeckExam] = useState<"NCLEX-RN" | "NLE" | "BOTH">("BOTH");
+  const [newDeckCardCount, setNewDeckCardCount] = useState(8);
+  const [isGeneratingDeck, setIsGeneratingDeck] = useState(false);
+  const [deckError, setDeckError] = useState<string | null>(null);
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load study documents & check if Documents Hub passed a deck to open
+  useEffect(() => {
+    loadUserDocs();
+
+    const targetDeckId = sessionStorage.getItem("new_deck_to_open");
+    if (targetDeckId) {
+      const saved = localStorage.getItem("real_nurse_decks");
+      const currentList = saved ? JSON.parse(saved) : decks;
+      if (saved) setDecks(currentList);
+      const match = currentList.find((d: DeckItem) => d.id === targetDeckId);
+      if (match) {
+        startStudying(targetDeckId);
+      }
+      sessionStorage.removeItem("new_deck_to_open");
+    }
+  }, []);
+
+  const loadUserDocs = async () => {
+    try {
+      const list = await fetchStudyDocuments();
+      setDocs(list);
+      if (list.length > 0 && !selectedDocId) {
+        setSelectedDocId(list[0].id);
+        setNewDeckTitle(list[0].filename.replace(/\.[^/.]+$/, ""));
+      }
+    } catch (err) {
+      console.warn("Failed to load documents in Flashcards:", err);
+    }
+  };
+
+  const handleFileUploadForDeck = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    setDeckError(null);
+
+    const MAX_SIZE = 25 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      setDeckError(
+        `File "${file.name}" is ${(file.size / (1024 * 1024)).toFixed(1)} MB, exceeding the 25 MB limit.`
+      );
+      return;
+    }
+
+    setIsUploadingFile(true);
+    try {
+      const newDoc = await uploadStudyDocument(file, user?.id);
+      setDocs((prev) => [newDoc, ...prev]);
+      setSelectedDocId(newDoc.id);
+      setNewDeckTitle(newDoc.filename.replace(/\.[^/.]+$/, ""));
+    } catch (err: any) {
+      setDeckError(err.message || "Failed to upload document.");
+    } finally {
+      setIsUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleGenerateDeckFromFile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDocId) {
+      setDeckError("Please select or upload a document first.");
+      return;
+    }
+
+    const doc = docs.find((d) => d.id === selectedDocId);
+    if (!doc) return;
+
+    setDeckError(null);
+    setIsGeneratingDeck(true);
+
+    try {
+      const generatedCards = await generateFlashcardsFromDoc(selectedDocId, newDeckCardCount);
+      if (!generatedCards || generatedCards.length === 0) {
+        throw new Error("No flashcards could be extracted from this document.");
+      }
+
+      const deckId = `deck-custom-${Date.now()}`;
+      const title = newDeckTitle.trim() || doc.filename.replace(/\.[^/.]+$/, "");
+
+      const formattedCards: FlashcardItem[] = generatedCards.map((c, i) => ({
+        id: `card-${Date.now()}-${i}`,
+        deck_id: deckId,
+        front: c.front,
+        back: c.back,
+        explanation: c.pageNumber ? `Source: ${doc.filename} (Page ${c.pageNumber})` : `Grounded in ${doc.filename}`,
+        fsrsCard: createNewCard(),
+      }));
+
+      const newDeck: DeckItem = {
+        id: deckId,
+        title,
+        category: newDeckCategory,
+        exam: newDeckExam,
+        description: `Custom deck synthesized from ${doc.filename} (${doc.pageCount} pages).`,
+        cards: formattedCards,
+      };
+
+      const updated = [newDeck, ...decks];
+      saveDecks(updated);
+      setShowDocDeckModal(false);
+      startStudying(deckId);
+    } catch (err: any) {
+      setDeckError(err.message || "Failed to generate deck from file.");
+    } finally {
+      setIsGeneratingDeck(false);
+    }
+  };
+
+  const handleDeleteDeck = (deckId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this custom deck?")) return;
+    const updated = decks.filter((d) => d.id !== deckId);
+    saveDecks(updated);
+    if (activeDeckId === deckId) {
+      setActiveDeckId(null);
+    }
+  };
 
   const activeDeck = decks.find((d) => d.id === activeDeckId) || null;
   const cards = activeDeck?.cards || [];
@@ -298,38 +444,259 @@ export default function Flashcards() {
   if (!activeDeck) {
     return (
       <div className="rise space-y-8 max-w-5xl mx-auto">
-        <PageHead
-          eyebrow="Spaced Repetition System (FSRS)"
-          title="Clinical Flashcard Decks"
-          sub="Review high-yield clinical facts, drug dosages, and nursing jurisprudence. FSRS adapts return intervals based on your recall accuracy."
-        />
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <PageHead
+            eyebrow="Spaced Repetition System (FSRS)"
+            title="Clinical Flashcard Decks"
+            sub="Review high-yield clinical facts, drug dosages, and nursing jurisprudence. FSRS adapts return intervals based on your recall accuracy."
+          />
+
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <Btn
+              onClick={() => {
+                setDeckError(null);
+                setShowDocDeckModal(true);
+              }}
+              className="py-2.5 px-4 text-xs font-bold shadow-sm"
+            >
+              <Sparkles size={14} /> Create Deck from File
+            </Btn>
+
+            {go && (
+              <Btn
+                variant="soft"
+                onClick={() => go("docs")}
+                className="py-2.5 px-3.5 text-xs font-semibold"
+              >
+                <FolderOpen size={14} /> Document Hub
+              </Btn>
+            )}
+          </div>
+        </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {decks.map((d) => (
-            <Card key={d.id} className="p-7 flex flex-col justify-between hover:shadow-md transition-shadow">
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <Pill tone={d.exam === "NLE" ? "amber" : "teal"}>{d.exam} Exam</Pill>
-                  <span className="text-xs font-semibold text-ink-soft flex items-center gap-1.5">
-                    <Layers size={13} className="text-rosetext" /> {d.cards.length} cards
-                  </span>
+          {decks.map((d) => {
+            const isCustom = d.id.startsWith("deck-custom-") || d.description.includes("synthesized") || d.description.includes("Custom");
+            return (
+              <Card key={d.id} className="p-7 flex flex-col justify-between hover:shadow-md transition-shadow relative group">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Pill tone={d.exam === "NLE" ? "amber" : "teal"}>{d.exam} Exam</Pill>
+                      {isCustom && <Pill tone="rose">📄 Grounded</Pill>}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-ink-soft flex items-center gap-1.5">
+                        <Layers size={13} className="text-rosetext" /> {d.cards.length} cards
+                      </span>
+                      {isCustom && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteDeck(d.id, e)}
+                          title="Delete Deck"
+                          className="size-6 rounded-full hover:bg-danger/10 text-ink-soft hover:text-danger grid place-items-center transition-colors"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold font-display leading-snug">{d.title}</h3>
+                  <p className="mt-2 text-xs font-medium text-rosetext">{d.category}</p>
+                  <p className="mt-2 text-sm text-ink-soft leading-relaxed">{d.description}</p>
                 </div>
-                <h3 className="text-xl font-bold font-display leading-snug">{d.title}</h3>
-                <p className="mt-2 text-xs font-medium text-rosetext">{d.category}</p>
-                <p className="mt-2 text-sm text-ink-soft leading-relaxed">{d.description}</p>
+
+                <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
+                  <span className="text-xs font-semibold text-ink-soft">
+                    {d.cards.length} cards in deck
+                  </span>
+                  <Btn onClick={() => startStudying(d.id)} className="px-5 py-2 text-xs">
+                    Study Deck
+                  </Btn>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Modal: Create Deck from Uploaded File */}
+        {showDocDeckModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/40 backdrop-blur-sm animate-fadeIn">
+            <Card className="w-full max-w-lg p-6 sm:p-8 bg-white relative max-h-[90vh] overflow-y-auto">
+              <button
+                onClick={() => setShowDocDeckModal(false)}
+                className="absolute top-5 right-5 size-8 rounded-full bg-lav hover:bg-lav-deep grid place-items-center text-ink-soft"
+                aria-label="Close"
+              >
+                <X size={16} />
+              </button>
+
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="size-9 rounded-xl bg-teal-tint text-rosetext grid place-items-center">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-ink">Create Deck from Uploaded File</h3>
+                  <p className="text-xs text-ink-soft">Synthesize FSRS spaced repetition cards from your study files</p>
+                </div>
               </div>
 
-              <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
-                <span className="text-xs font-semibold text-ink-soft">
-                  {d.cards.length} due today
-                </span>
-                <Btn onClick={() => startStudying(d.id)} className="px-5 py-2 text-xs">
-                  Study Deck
+              {deckError && (
+                <div className="my-4 p-3.5 rounded-xl bg-[#ffdad6] border border-danger/30 text-danger text-xs font-semibold flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{deckError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleGenerateDeckFromFile} className="space-y-4 mt-4">
+                {/* Upload or select file */}
+                <div>
+                  <label className="block text-xs font-bold text-ink-soft uppercase tracking-wider mb-2">
+                    Study Document Source
+                  </label>
+
+                  {/* Direct upload row */}
+                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-dashed border-teal/60 bg-teal-tint/40 mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <UploadCloud size={18} className="text-rosetext shrink-0" />
+                      <div>
+                        <p className="text-xs font-bold text-ink">Upload new document</p>
+                        <p className="text-[11px] text-ink-soft">PDF or TXT up to 25 MB</p>
+                      </div>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.txt,.md"
+                      className="hidden"
+                      onChange={(e) => handleFileUploadForDeck(e.target.files)}
+                    />
+                    <Btn
+                      type="button"
+                      variant="soft"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploadingFile}
+                      className="text-xs font-semibold py-1.5 px-3"
+                    >
+                      {isUploadingFile ? "Processing…" : "Choose File"}
+                    </Btn>
+                  </div>
+
+                  {docs.length === 0 ? (
+                    <div className="p-4 rounded-xl border border-line bg-canvas text-center text-xs text-ink-soft">
+                      No files uploaded yet. Click "Choose File" above to upload your first study material.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                      {docs.map((doc) => {
+                        const isChosen = selectedDocId === doc.id;
+                        return (
+                          <div
+                            key={doc.id}
+                            onClick={() => {
+                              setSelectedDocId(doc.id);
+                              if (!newDeckTitle || newDeckTitle === "Custom Deck") {
+                                setNewDeckTitle(doc.filename.replace(/\.[^/.]+$/, ""));
+                              }
+                            }}
+                            className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                              isChosen
+                                ? "border-teal bg-teal-tint/30 ring-2 ring-teal shadow-2xs font-bold text-ink"
+                                : "border-line bg-canvas hover:bg-lav text-ink-soft"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 truncate">
+                              <FileText size={15} className="shrink-0 text-rosetext" />
+                              <span className="text-xs truncate">{doc.filename}</span>
+                            </div>
+                            <span className="text-[11px] opacity-75 shrink-0">{doc.pageCount} pgs</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Deck Title */}
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft mb-1">Deck Title</label>
+                  <input
+                    required
+                    type="text"
+                    value={newDeckTitle}
+                    onChange={(e) => setNewDeckTitle(e.target.value)}
+                    placeholder="e.g. Digoxin & Cardiac Pharmacology"
+                    className="w-full rounded-2xl border border-line bg-canvas p-3 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+                  />
+                </div>
+
+                {/* Category & Exam */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-soft mb-1">Category</label>
+                    <select
+                      value={newDeckCategory}
+                      onChange={(e) => setNewDeckCategory(e.target.value)}
+                      className="w-full rounded-2xl border border-line bg-canvas p-3 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+                    >
+                      <option value="Pharmacology">Pharmacology</option>
+                      <option value="Physiological Integrity">Med-Surg / Fluids</option>
+                      <option value="Maternal & Child">Maternal & Child</option>
+                      <option value="Psychiatric Nursing">Psychiatric</option>
+                      <option value="Nursing Practice & Jurisprudence">Jurisprudence & Ethics</option>
+                      <option value="Fundamentals">Fundamentals</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-ink-soft mb-1">Target Exam</label>
+                    <select
+                      value={newDeckExam}
+                      onChange={(e) => setNewDeckExam(e.target.value as any)}
+                      className="w-full rounded-2xl border border-line bg-canvas p-3 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-teal"
+                    >
+                      <option value="BOTH">Both (NLE & NCLEX)</option>
+                      <option value="NLE">Philippine NLE</option>
+                      <option value="NCLEX-RN">US NCLEX-RN</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Card Count Selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-ink-soft mb-1.5">Cards to Synthesize</label>
+                  <div className="flex gap-2">
+                    {[5, 8, 12, 15].map((cnt) => (
+                      <button
+                        key={cnt}
+                        type="button"
+                        onClick={() => setNewDeckCardCount(cnt)}
+                        className={`flex-1 py-2 text-xs font-semibold rounded-xl border transition-all ${
+                          newDeckCardCount === cnt
+                            ? "bg-teal text-ink border-teal font-bold"
+                            : "bg-canvas border-line text-ink-soft hover:bg-lav"
+                        }`}
+                      >
+                        {cnt} Cards
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Btn
+                  type="submit"
+                  disabled={isGeneratingDeck || !selectedDocId}
+                  className="w-full py-3.5 mt-2 text-xs font-bold"
+                >
+                  <Sparkles size={15} />
+                  {isGeneratingDeck
+                    ? "Synthesizing Flashcards with Clinical Rationales…"
+                    : `Synthesize ${newDeckCardCount} Cards with Gemini AI`}
                 </Btn>
-              </div>
+              </form>
             </Card>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
     );
   }

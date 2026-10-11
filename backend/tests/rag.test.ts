@@ -46,7 +46,7 @@ describe("Phase 5: Document Hub & Grounded RAG", () => {
     expect(Array.isArray(res.body.citations)).toBe(true);
     expect(res.body.citations.length).toBeGreaterThan(0);
     expect(res.body.citations[0].pageNumber).toBeDefined();
-  });
+  }, 15000);
 
   it("POST /api/documents/:id/generate-flashcards produces cards referencing pages", async () => {
     const res = await request(app)

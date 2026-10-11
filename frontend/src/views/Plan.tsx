@@ -16,6 +16,7 @@ import {
   generateStudyPlan,
   KIND_TONES,
   defaultSubjects,
+  getDefaultExamDate,
   type PlannerConfig,
   type StudyDayKind,
   type DaySchedule,
@@ -31,7 +32,7 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
     if (saved) return JSON.parse(saved);
 
     return {
-      examDate: profile.exam_date || "2025-11-18",
+      examDate: profile.exam_date || getDefaultExamDate(),
       hoursPerDay: Math.max(1, Math.round((profile.daily_goal_minutes || 60) / 60)),
       restDayMode: "sunday",
       customRestDays: [0], // Sunday

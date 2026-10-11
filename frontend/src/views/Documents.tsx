@@ -26,6 +26,7 @@ import {
   DocumentDetails,
   ChatCitation,
 } from "../lib/api";
+import { createNewCard } from "../lib/srs";
 import { useAuth } from "../context/AuthContext";
 
 interface ChatMessage {
@@ -35,7 +36,11 @@ interface ChatMessage {
   timestamp?: string;
 }
 
-export default function Documents() {
+interface DocumentsProps {
+  go?: (v: string) => void;
+}
+
+export default function Documents({ go }: DocumentsProps) {
   const { user } = useAuth();
   const [docs, setDocs] = useState<StudyDocument[]>([]);
   const [curIndex, setCurIndex] = useState(0);
@@ -209,6 +214,49 @@ export default function Documents() {
       console.error(err);
     } finally {
       setGeneratingType(null);
+    }
+  };
+
+  const handleSaveDeckAndStudy = () => {
+    if (!currentDoc || !generationResult || generationResult.type !== "flashcards") return;
+    const deckId = `deck-custom-${Date.now()}`;
+    const newCards = generationResult.items.map((c: any, i: number) => ({
+      id: `card-${Date.now()}-${i}`,
+      deck_id: deckId,
+      front: c.front,
+      back: c.back,
+      explanation: c.pageNumber ? `Source: ${currentDoc.filename} (Page ${c.pageNumber})` : `Grounded in ${currentDoc.filename}`,
+      fsrsCard: createNewCard(),
+    }));
+
+    const newDeck = {
+      id: deckId,
+      title: currentDoc.filename.replace(/\.[^/.]+$/, ""),
+      category: "Document Synthesis",
+      exam: "BOTH" as const,
+      description: `Synthesized from ${currentDoc.filename} (${currentDoc.pageCount} pages).`,
+      cards: newCards,
+    };
+
+    try {
+      const saved = localStorage.getItem("real_nurse_decks");
+      const existing = saved ? JSON.parse(saved) : [];
+      localStorage.setItem("real_nurse_decks", JSON.stringify([newDeck, ...existing]));
+      sessionStorage.setItem("new_deck_to_open", deckId);
+      if (go) {
+        go("flashcards");
+      }
+    } catch (err) {
+      console.warn("Failed to save generated deck:", err);
+    }
+  };
+
+  const handleLaunchQuizInQuizMaker = () => {
+    if (!currentDoc || !generationResult || generationResult.type !== "quiz") return;
+    sessionStorage.setItem("custom_quiz_questions", JSON.stringify(generationResult.items));
+    sessionStorage.setItem("custom_quiz_title", currentDoc.filename);
+    if (go) {
+      go("quiz");
     }
   };
 
@@ -387,17 +435,35 @@ export default function Documents() {
 
               {/* Generation Result Notice */}
               {generationResult && (
-                <div className="rounded-2xl border border-teal/40 bg-teal-tint p-4 space-y-3 animate-fadeIn">
+                <div className="rounded-2xl border border-teal/40 bg-teal-tint p-4 space-y-3.5 animate-fadeIn">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-rosetext flex items-center gap-2">
                       <Sparkles size={15} />
                       Synthesized {generationResult.count} {generationResult.type === "flashcards" ? "Flashcards" : "Quiz Questions"} from {currentDoc.filename}
                     </span>
-                    <Pill tone="teal">Ready</Pill>
+                    <Pill tone="teal">Ready to Study</Pill>
                   </div>
                   <p className="text-xs text-ink leading-relaxed">
                     Items are grounded in the document text and mapped with clinical rationales.
                   </p>
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {generationResult.type === "flashcards" ? (
+                      <Btn
+                        onClick={handleSaveDeckAndStudy}
+                        className="text-xs font-bold py-2 px-4 shadow-sm"
+                      >
+                        <Layers size={14} /> Save as Deck & Open in Flashcards
+                      </Btn>
+                    ) : (
+                      <Btn
+                        onClick={handleLaunchQuizInQuizMaker}
+                        className="text-xs font-bold py-2 px-4 shadow-sm"
+                      >
+                        <Sparkles size={14} /> Launch Practice Drill in Quiz Maker
+                      </Btn>
+                    )}
+                  </div>
                 </div>
               )}
 

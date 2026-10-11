@@ -8,8 +8,11 @@ import { quizRouter } from "./routes/quiz.routes.js";
 import { mockRouter } from "./routes/mock.routes.js";
 import { documentRouter } from "./routes/document.routes.js";
 import { analyticsRouter } from "./routes/analytics.routes.js";
+import { globalLimiter, aiRateLimiter, authRateLimiter } from "./middleware/rateLimiter.js";
 
 const app = express();
+
+app.set("trust proxy", 1); // Enable proxy support for rate limiter IP detection
 
 app.use(cors({
   origin: [config.clientUrl, "http://localhost:5173", "http://localhost:8443", "http://localhost:3000"],
@@ -18,12 +21,15 @@ app.use(cors({
 
 app.use(express.json({ limit: "25mb" }));
 
+// Global bot & DoS defense
+app.use(globalLimiter);
+
 // Routes
 app.use("/api/taxonomy", taxonomyRouter);
-app.use("/api/profile", profileRouter);
-app.use("/api/quiz", quizRouter);
-app.use("/api/mock", mockRouter);
-app.use("/api/documents", documentRouter);
+app.use("/api/profile", authRateLimiter, profileRouter);
+app.use("/api/quiz", aiRateLimiter, quizRouter);
+app.use("/api/mock", aiRateLimiter, mockRouter);
+app.use("/api/documents", aiRateLimiter, documentRouter);
 app.use("/api/analytics", analyticsRouter);
 
 // Health Check & Diagnostics

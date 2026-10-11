@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
+import { getDefaultExamDate } from "../lib/planner";
 
 export interface UserProfile {
   id: string;
@@ -29,7 +30,7 @@ const defaultGuestProfile: UserProfile = {
   email: "sarah@nursing.ph",
   full_name: "Sarah Jenkins",
   target_exam: "NCLEX-RN",
-  exam_date: "2025-11-18",
+  exam_date: getDefaultExamDate(),
   daily_goal_minutes: 60,
   streak_days: 14,
 };
@@ -66,10 +67,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: data.email || userEmail,
           full_name: data.full_name || "Reviewee",
           target_exam: data.target_exam || "NCLEX-RN",
-          exam_date: data.exam_date || "2025-11-18",
+          exam_date: data.exam_date || getDefaultExamDate(),
           daily_goal_minutes: data.daily_goal_minutes || 60,
           streak_days: data.streak_days || 0,
         });
+      } else {
+        // Automatically sync new profile into profiles table when user is authenticated
+        const newRecord: UserProfile = {
+          id: userId,
+          email: userEmail,
+          full_name: profile.full_name || "Reviewee",
+          target_exam: profile.target_exam || "NCLEX-RN",
+          exam_date: profile.exam_date || getDefaultExamDate(),
+          daily_goal_minutes: 60,
+          streak_days: 1,
+        };
+        await supabase.from("profiles").upsert(newRecord).catch(() => {});
       }
     } catch (err) {
       console.warn("Could not fetch remote profile, keeping local:", err);
@@ -113,7 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     fullName: string,
     targetExam: "NCLEX-RN" | "NLE",
-    examDate: string = "2025-11-18"
+    examDate: string = getDefaultExamDate()
   ) => {
     if (!isSupabaseConfigured) {
       // Mock signup for local offline development
@@ -155,8 +168,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         streak_days: 1,
       };
       updateLocalProfile(newProf);
-      // Ensure row in profiles table exists
-      await supabase.from("profiles").upsert(newProf);
+
+      if (data.session) {
+        // User session immediately active
+        await supabase.from("profiles").upsert(newProf).catch(() => {});
+        return {};
+      } else {
+        // Email confirmation is required by Supabase settings
+        return {
+          notice: "Account registered! If email confirmation is enabled, check your inbox to confirm, or turn off 'Confirm email' in Supabase to login immediately.",
+        };
+      }
     }
 
     return {};
