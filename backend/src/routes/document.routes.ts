@@ -112,7 +112,7 @@ documentRouter.get("/", (_req: Request, res: Response) => {
  */
 documentRouter.get("/:id", (req: Request, res: Response) => {
   try {
-    const doc = RAGService.getDocumentById(req.params.id);
+    const doc = RAGService.getDocumentById(req.params.id as string);
     if (!doc) {
       return res.status(404).json({ success: false, error: "Document not found." });
     }
@@ -145,7 +145,7 @@ documentRouter.get("/:id", (req: Request, res: Response) => {
  */
 documentRouter.delete("/:id", (req: Request, res: Response) => {
   try {
-    const removed = RAGService.deleteDocument(req.params.id);
+    const removed = RAGService.deleteDocument(req.params.id as string);
     res.json({ success: removed });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -163,7 +163,7 @@ documentRouter.post("/:id/chat", async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: "Query string is required." });
     }
 
-    const result = await RAGService.answerQueryWithCitations(query, req.params.id);
+    const result = await RAGService.answerQueryWithCitations(query, req.params.id as string);
     res.json({
       success: true,
       answer: result.answer,
@@ -182,7 +182,7 @@ documentRouter.post("/:id/chat", async (req: Request, res: Response) => {
 documentRouter.post("/:id/generate-flashcards", async (req: Request, res: Response) => {
   try {
     const count = Number(req.body?.count) || 8;
-    const cards = await RAGService.generateFlashcards(req.params.id, count);
+    const cards = await RAGService.generateFlashcards(req.params.id as string, count);
     res.json({ success: true, count: cards.length, flashcards: cards });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -196,7 +196,7 @@ documentRouter.post("/:id/generate-flashcards", async (req: Request, res: Respon
 documentRouter.post("/:id/generate-quiz", async (req: Request, res: Response) => {
   try {
     const count = Number(req.body?.count) || 5;
-    const questions = await RAGService.generateQuiz(req.params.id, count);
+    const questions = await RAGService.generateQuiz(req.params.id as string, count);
     res.json({ success: true, count: questions.length, questions });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

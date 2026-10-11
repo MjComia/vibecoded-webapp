@@ -64,7 +64,7 @@ function AppContent() {
     plan: <Plan go={go} />,
     tasks: <Tasks go={go} />,
     pomodoro: <Pomodoro />,
-    analytics: <Analytics />,
+    analytics: <Analytics go={go} />,
     mock: <Mock />,
     docs: <Documents />,
     community: <Community />,

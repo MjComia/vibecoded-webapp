@@ -1,7 +1,8 @@
 import { ArrowRight, Flame, Hourglass, Layers, UploadCloud, Zap, Timer, CheckCircle2, Circle, FileText, Presentation, Calculator, FlaskConical } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, Btn, Pill, Bar, Ring } from "../ui";
 import { useAuth } from "../context/AuthContext";
+import { fetchAnalytics, AnalyticsSummary } from "../lib/api";
 
 const initialPlan = [
   { t: "Review 25 cardiac pharmacology flashcards", time: "08:30", done: true },
@@ -11,21 +12,33 @@ const initialPlan = [
   { t: "Evening review: bookmarked NCLEX questions", time: "07:30 PM", done: false },
 ];
 
-const focus = [
-  { tag: "Med-Surg", t: "Dosage calculations & IV flow rates", m: 42, tone: "red" as const, cta: "Retake 10-item drill" },
-  { tag: "Psychiatric", t: "Defense mechanisms & therapeutic communication", m: 51, tone: "amber" as const, cta: "Review 18 cards" },
-  { tag: "Physiology", t: "Fluid & electrolyte imbalances", m: 56, tone: "teal" as const, cta: "Practice cases" },
-];
-
 export default function Dashboard({ go }: { go: (v: string) => void }) {
   const { profile } = useAuth();
   const [plan, setPlan] = useState(initialPlan);
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const done = plan.filter((p) => p.done).length;
+
+  useEffect(() => {
+    const examType = profile.target_exam === "NCLEX-RN" ? "NCLEX-RN" : "NLE";
+    fetchAnalytics(examType).then(setAnalytics);
+  }, [profile.target_exam]);
 
   const firstName = profile.full_name?.split(" ")[0] || "Candidate";
   const examDateObj = new Date(profile.exam_date || "2025-11-18");
   const examDateFormatted = examDateObj.toLocaleDateString("en-US", { month: "short", year: "numeric" });
   const daysRemaining = Math.max(0, Math.ceil((examDateObj.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
+  const readinessScore = analytics?.overallReadiness ?? 74;
+  const isLikelyPassing = readinessScore >= 75;
+
+  const handleStartDrill = (subject?: string, topic?: string) => {
+    if (topic) {
+      sessionStorage.setItem("priority_drill_topic", topic);
+      sessionStorage.setItem("priority_drill_subject", subject || "Med-Surg");
+      sessionStorage.setItem("priority_drill_count", "10");
+    }
+    go("quiz");
+  };
 
   return (
     <div className="space-y-10 rise">
@@ -39,15 +52,31 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
         </div>
         <div className="flex flex-wrap gap-3">
           <Btn onClick={() => go("docs")}><UploadCloud size={16} /> Upload notes</Btn>
-          <Btn variant="soft" onClick={() => go("quiz")}><Zap size={16} /> Quick 10-item drill</Btn>
+          <Btn variant="soft" onClick={() => handleStartDrill()}><Zap size={16} /> Quick 10-item drill</Btn>
           <Btn variant="ghost" onClick={() => go("pomodoro")}><Timer size={16} /> Focus timer</Btn>
         </div>
       </header>
 
       <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-6 flex items-center gap-5">
-          <Ring value={78} label={<span className="text-xl">78%</span>} />
-          <div><p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Predicted readiness</p><div className="mt-2"><Pill tone="teal">Likely to pass</Pill></div></div>
+        <Card
+          className="p-6 flex items-center gap-5 cursor-pointer hover:border-rosetext/50 transition-all"
+          onClick={() => go("analytics")}
+        >
+          <Ring
+            value={readinessScore}
+            size={88}
+            tone={isLikelyPassing ? "#006a6a" : readinessScore >= 70 ? "#ffb86b" : "#ba1a1a"}
+            label={<span className="text-xl font-bold">{readinessScore}%</span>}
+          />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Predicted readiness</p>
+            <div className="mt-2">
+              <Pill tone={isLikelyPassing ? "teal" : readinessScore >= 70 ? "amber" : "red"}>
+                {analytics?.passLikelihood || "Borderline"}
+              </Pill>
+            </div>
+            <p className="text-[11px] text-ink-soft mt-1">PRC 75% Standard</p>
+          </div>
         </Card>
         <Card className="p-6">
           <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">Countdown</p>
@@ -110,17 +139,47 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
           </div>
 
           <Card className="p-8">
-            <div className="flex items-start justify-between gap-4"><div><h2 className="text-xl font-bold">Focus areas needing polish</h2><p className="mt-1 text-sm text-ink-soft">Gaps detected from recent mock tests and spaced reviews.</p></div><Pill tone="red">3 priorities</Pill></div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold">Focus areas needing polish</h2>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Priority topics scoring below 75% PRC passing benchmark.
+                </p>
+              </div>
+              <button onClick={() => go("analytics")}>
+                <Pill tone="red">
+                  {analytics?.weakAreas.length || 3} priorities
+                </Pill>
+              </button>
+            </div>
             <div className="mt-7 space-y-6">
-              {focus.map((f) => (
-                <div key={f.t} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3"><Pill>{f.tag}</Pill><p className="text-sm font-semibold">{f.t}</p></div>
-                    <div className="mt-3 flex items-center gap-4"><div className="flex-1"><Bar value={f.m} tone={f.tone} /></div><span className="text-xs font-bold w-20">{f.m}% mastery</span></div>
+              {(analytics?.weakAreas?.slice(0, 3) || [
+                { subject: "Med-Surg", topic: "Fluid Volume Deficit & IV Flow Rates", masteryPercentage: 46, status: "critical" },
+                { subject: "Med-Surg", topic: "Oxygenation & ABG Interpretation", masteryPercentage: 55, status: "critical" },
+                { subject: "Psychiatric", topic: "Defense mechanisms & therapeutic communication", masteryPercentage: 64, status: "borderline" },
+              ]).map((f: any) => {
+                const tone = f.masteryPercentage < 60 ? "red" : f.masteryPercentage < 75 ? "amber" : "teal";
+                return (
+                  <div key={f.topic} className="grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Pill tone={tone}>{f.subject}</Pill>
+                        <p className="text-sm font-semibold">{f.topic}</p>
+                      </div>
+                      <div className="mt-3 flex items-center gap-4">
+                        <div className="flex-1"><Bar value={f.masteryPercentage} tone={tone} /></div>
+                        <span className="text-xs font-bold w-20">{f.masteryPercentage}% mastery</span>
+                      </div>
+                    </div>
+                    <Btn
+                      variant="ghost"
+                      onClick={() => handleStartDrill(f.subject, f.topic)}
+                    >
+                      Target 10-Item Drill
+                    </Btn>
                   </div>
-                  <Btn variant="ghost" onClick={() => go("quiz")}>{f.cta}</Btn>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
         </div>

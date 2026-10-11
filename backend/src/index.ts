@@ -7,6 +7,7 @@ import { profileRouter } from "./routes/profile.routes.js";
 import { quizRouter } from "./routes/quiz.routes.js";
 import { mockRouter } from "./routes/mock.routes.js";
 import { documentRouter } from "./routes/document.routes.js";
+import { analyticsRouter } from "./routes/analytics.routes.js";
 
 const app = express();
 
@@ -23,6 +24,7 @@ app.use("/api/profile", profileRouter);
 app.use("/api/quiz", quizRouter);
 app.use("/api/mock", mockRouter);
 app.use("/api/documents", documentRouter);
+app.use("/api/analytics", analyticsRouter);
 
 // Health Check & Diagnostics
 app.get("/api/health", (_req, res) => {

@@ -1,7 +1,7 @@
-import { useState } from "react";
-import { Sparkles, Check, X, FileText, BookOpen, AlertCircle, RefreshCw, Bookmark } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Sparkles, Check, X, FileText, BookOpen, AlertCircle, RefreshCw, Bookmark, Zap } from "lucide-react";
 import { Card, PageHead, Btn, Pill } from "../ui";
-import { generateAIQuiz } from "../lib/api";
+import { generateAIQuiz, recordStudyAttempt } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 
@@ -31,6 +31,7 @@ export default function Quiz() {
   const [l, setL] = useState(levels[1]);
   const [itemCount, setItemCount] = useState(3);
   const [customNotes, setCustomNotes] = useState("");
+  const [priorityNotice, setPriorityNotice] = useState<string | null>(null);
 
   const [phase, setPhase] = useState<"setup" | "loading" | "run" | "done">("setup");
   const [questions, setQuestions] = useState<any[]>([]);
@@ -39,6 +40,26 @@ export default function Quiz() {
   const [score, setScore] = useState(0);
   const [userAnswers, setUserAnswers] = useState<number[]>([]);
   const [flaggedIds, setFlaggedIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    const drillTopic = sessionStorage.getItem("priority_drill_topic");
+    const drillSubject = sessionStorage.getItem("priority_drill_subject");
+    const drillCount = sessionStorage.getItem("priority_drill_count");
+
+    if (drillTopic) {
+      if (drillSubject) {
+        // Match existing subject or fallback to Med-Surg
+        const matched = subjects.find((subj) => subj.toLowerCase().includes(drillSubject.toLowerCase()) || drillSubject.toLowerCase().includes(subj.toLowerCase()));
+        setS(matched || subjects[1]);
+      }
+      setT(drillTopic);
+      setItemCount(drillCount ? parseInt(drillCount, 10) : 10);
+      setPriorityNotice(`⚡ Weak Area Priority Drill Activated: 10 targeted questions on "${drillTopic}".`);
+      sessionStorage.removeItem("priority_drill_topic");
+      sessionStorage.removeItem("priority_drill_subject");
+      sessionStorage.removeItem("priority_drill_count");
+    }
+  }, []);
 
   const toggleFlag = (id: string) => {
     setFlaggedIds((prev) =>
@@ -88,12 +109,21 @@ export default function Quiz() {
     } else {
       setPhase("done");
 
+      const finalScore = score + (pick === questions[n].correct_answer_index ? 1 : 0);
+      recordStudyAttempt({
+        type: "quiz",
+        subject: s,
+        topic: t,
+        score: finalScore,
+        total: questions.length,
+      });
+
       // Log quiz result to Supabase if logged in
       if (isSupabaseConfigured && user) {
         try {
           await supabase.from("quiz_attempts").insert({
             user_id: user.id,
-            score: score + (pick === questions[n].correct_answer_index ? 1 : 0),
+            score: finalScore,
             total_items: questions.length,
             answers: userAnswers,
           });
@@ -118,6 +148,22 @@ export default function Quiz() {
         title="Generate High-Yield Practice Drills"
         sub="Synthesize authentic NCLEX & NLE licensure questions grounded in board competencies or your uploaded study notes."
       />
+
+      {priorityNotice && (
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-[#ffe8cf] to-[#fff3e0] border border-[#ffcc80] flex items-center justify-between gap-3 text-ink">
+          <div className="flex items-center gap-2.5">
+            <Zap size={18} className="text-amber shrink-0" fill="#ffb86b" />
+            <p className="text-xs sm:text-sm font-bold">{priorityNotice}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPriorityNotice(null)}
+            className="text-xs font-semibold text-ink-soft hover:text-ink px-2 py-1"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {phase === "setup" && (
         <Card className="p-6 md:p-10 space-y-8">
