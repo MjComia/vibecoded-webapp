@@ -16,6 +16,7 @@ import {
   UserCircle,
   LogOut,
   ArrowRight,
+  WifiOff,
 } from "lucide-react";
 import Landing from "./views/Landing";
 import Dashboard from "./views/Dashboard";
@@ -32,6 +33,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { PomodoroProvider, usePomodoro } from "./context/PomodoroContext";
 import AuthModal from "./components/AuthModal";
 import { Pill, Btn } from "./ui";
+import { useOnlineStatus } from "./lib/offline";
+
 
 const nav = [
   { id: "dash", l: "Dashboard", i: LayoutDashboard },
@@ -55,6 +58,7 @@ function AppContent() {
 
   const { profile, isGuest, signOut, user } = useAuth();
   const { isRunning: isPomoRunning, formattedTime: pomoTime } = usePomodoro();
+  const isOnline = useOnlineStatus();
 
   const handleOpenAuth = (mode: "signin" | "signup" = "signup") => {
     setAuthModalMode(mode);
@@ -110,11 +114,38 @@ function AppContent() {
     community: <Community />,
   }[view];
 
+  const mobileBottomNav = [
+    { id: "dash", l: "Home", i: LayoutDashboard },
+    { id: "flashcards", l: "Cards", i: Layers },
+    { id: "quiz", l: "Quiz", i: Sparkles },
+    { id: "plan", l: "Plan", i: CalendarDays },
+  ];
+
   return (
     <div className="min-h-screen bg-canvas">
+      {/* Keyboard Accessibility Skip Link */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:bg-rosetext focus:text-white focus:rounded-xl focus:shadow-md focus:font-bold focus:text-xs"
+      >
+        Skip to main content
+      </a>
+
+      {/* Offline Status Warning Ribbon */}
+      {!isOnline && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className="bg-amber text-white px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2 sticky top-0 z-50 shadow-xs"
+        >
+          <WifiOff size={14} />
+          <span>You are currently offline. Spaced repetition flashcards and saved study plans remain available.</span>
+        </aside>
+      )}
+
       {/* Demo Mode Top Notification Banner */}
       {!user && demoMode && (
-        <div className="bg-gradient-to-r from-teal-tint via-lav to-lav-deep px-5 py-2.5 border-b border-line flex flex-wrap items-center justify-between gap-3 text-xs z-50 sticky top-0">
+        <div className="bg-gradient-to-r from-teal-tint via-lav to-lav-deep px-5 py-2.5 border-b border-line flex flex-wrap items-center justify-between gap-3 text-xs z-40 sticky top-0">
           <span className="font-semibold text-rosetext flex items-center gap-1.5">
             <Sparkles size={14} /> You are exploring the <b>Interactive Demo</b> with sample candidate data.
           </span>
@@ -135,9 +166,18 @@ function AppContent() {
         </div>
       )}
 
+      {/* Mobile Drawer Backdrop */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-ink/30 backdrop-blur-xs z-20 lg:hidden"
+          onClick={() => setOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
       <div className="lg:grid lg:grid-cols-[272px_1fr]">
         {/* Mobile Top Bar */}
-        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-white/90 backdrop-blur border-b border-line px-5 py-4">
+        <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-white/95 backdrop-blur border-b border-line px-5 py-3.5">
           <div className="flex items-center gap-2">
             <span className="font-display font-extrabold text-lg text-rosetext">Real Nurse</span>
             <Pill tone={profile.target_exam === "NLE" ? "amber" : "teal"}>{profile.target_exam}</Pill>
@@ -150,16 +190,13 @@ function AppContent() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => handleOpenAuth("signin")}
               className="text-xs font-semibold px-3 py-1.5 rounded-full bg-lav text-ink flex items-center gap-1.5"
             >
               <UserCircle size={14} />
               {isGuest ? "Sign In" : profile.full_name.split(" ")[0]}
-            </button>
-            <button onClick={() => setOpen(!open)} aria-label="Menu" className="p-1">
-              {open ? <X /> : <Menu />}
             </button>
           </div>
         </header>
@@ -168,7 +205,7 @@ function AppContent() {
         <aside
           className={`${
             open ? "block" : "hidden"
-          } lg:flex flex-col justify-between fixed lg:sticky inset-x-0 top-[61px] lg:top-0 bottom-0 lg:h-screen z-20 bg-white border-r border-line p-6 overflow-y-auto`}
+          } lg:flex flex-col justify-between fixed lg:sticky inset-x-0 top-[57px] lg:top-0 bottom-0 lg:h-screen z-30 bg-white border-r border-line p-6 overflow-y-auto`}
         >
           <div>
             {/* Logo & Target Exam */}
@@ -186,6 +223,13 @@ function AppContent() {
                   </span>
                 </div>
               </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="lg:hidden p-1.5 rounded-xl hover:bg-lav text-ink-soft"
+                aria-label="Close menu"
+              >
+                <X size={20} />
+              </button>
             </div>
 
             <nav className="space-y-1.5">
@@ -248,10 +292,56 @@ function AppContent() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="px-5 sm:px-8 lg:px-14 py-10 lg:py-14 max-w-[1280px] w-full mx-auto">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="px-5 sm:px-8 lg:px-14 py-8 lg:py-14 pb-28 lg:pb-14 max-w-[1280px] w-full mx-auto outline-none"
+        >
           {V}
         </main>
       </div>
+
+      {/* Mobile Bottom Navigation Bar */}
+      <nav
+        aria-label="Mobile Navigation"
+        className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur border-t border-line safe-area-bottom shadow-lg"
+      >
+        <div className="flex items-center justify-around px-2 pt-1.5">
+          {mobileBottomNav.map((item) => {
+            const active = view === item.id && !open;
+            return (
+              <button
+                key={item.id}
+                onClick={() => go(item.id)}
+                className={`flex-1 flex flex-col items-center justify-center py-1.5 min-h-[48px] rounded-xl transition-all ${
+                  active ? "text-rosetext font-bold" : "text-ink-soft hover:text-ink font-medium"
+                }`}
+                aria-current={active ? "page" : undefined}
+              >
+                <div className={`p-1 rounded-xl transition-colors ${active ? "bg-teal text-rosetext" : ""}`}>
+                  <item.i size={18} />
+                </div>
+                <span className="text-[10px] tracking-tight mt-0.5">{item.l}</span>
+              </button>
+            );
+          })}
+
+          {/* More Drawer Toggle */}
+          <button
+            onClick={() => setOpen(!open)}
+            className={`flex-1 flex flex-col items-center justify-center py-1.5 min-h-[48px] rounded-xl transition-all ${
+              open ? "text-rosetext font-bold" : "text-ink-soft hover:text-ink font-medium"
+            }`}
+            aria-expanded={open}
+            aria-label="More navigation links"
+          >
+            <div className={`p-1 rounded-xl transition-colors ${open ? "bg-teal text-rosetext" : ""}`}>
+              {open ? <X size={18} /> : <Menu size={18} />}
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5">{open ? "Close" : "More"}</span>
+          </button>
+        </div>
+      </nav>
 
       {/* Authentication Modal */}
       <AuthModal

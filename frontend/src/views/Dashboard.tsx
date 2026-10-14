@@ -14,12 +14,23 @@ import {
   FlaskConical,
   Sparkles,
   Calendar,
+  Bell,
+  BellRing,
+  BellOff,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Card, Btn, Pill, Bar, Ring } from "../ui";
 import { useAuth } from "../context/AuthContext";
 import { fetchAnalytics, AnalyticsSummary } from "../lib/api";
 import { getDefaultExamDate } from "../lib/planner";
+import {
+  isStudyReminderEnabled,
+  setStudyReminderEnabled,
+  requestStudyNotificationPermission,
+  checkDailyDueCardsReminder,
+  getNotificationPermission,
+} from "../lib/notifications";
+
 
 const newCandidatePlan = [
   { id: "dc-1", t: "Complete 10-item diagnostic drill to set your baseline", time: "Day 1", done: false },
@@ -56,7 +67,47 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
   const [plan, setPlan] = useState(getInitialPlan);
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [editingDate, setEditingDate] = useState(false);
+  const [reminderEnabled, setReminderEnabled] = useState(isStudyReminderEnabled);
   const done = plan.filter((p) => p.done).length;
+
+  useEffect(() => {
+    // Check if cards are due and trigger scheduled daily reminder if enabled
+    try {
+      const saved = localStorage.getItem("real_nurse_decks");
+      if (saved) {
+        const decks = JSON.parse(saved);
+        if (Array.isArray(decks)) {
+          const now = new Date();
+          let count = 0;
+          for (const d of decks) {
+            if (Array.isArray(d.cards)) {
+              for (const c of d.cards) {
+                if (c.fsrsCard?.due && new Date(c.fsrsCard.due) <= now) {
+                  count++;
+                }
+              }
+            }
+          }
+          if (count > 0) {
+            checkDailyDueCardsReminder(count);
+          }
+        }
+      }
+    } catch {}
+  }, []);
+
+  const handleToggleReminder = async () => {
+    if (reminderEnabled) {
+      setStudyReminderEnabled(false);
+      setReminderEnabled(false);
+    } else {
+      const granted = await requestStudyNotificationPermission();
+      setReminderEnabled(granted);
+      if (!granted && getNotificationPermission() === "denied") {
+        alert("Notification permissions are blocked in your browser. Please allow notifications in site settings to receive review alerts.");
+      }
+    }
+  };
 
   useEffect(() => {
     const examType = profile.target_exam === "NCLEX-RN" ? "NCLEX-RN" : "NLE";
@@ -66,6 +117,7 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
   useEffect(() => {
     setPlan(getInitialPlan());
   }, [isNewAccount]);
+
 
   const handleTogglePlanItem = (idx: number) => {
     const target = plan[idx];
@@ -240,8 +292,49 @@ export default function Dashboard({ go }: { go: (v: string) => void }) {
         </Card>
       </div>
 
+      {/* Daily Study Notification Bar */}
+      <div className="rounded-2xl border border-line bg-white p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className={`size-10 rounded-xl grid place-items-center ${reminderEnabled ? "bg-teal-tint text-rosetext" : "bg-lav text-ink-soft"}`}>
+            {reminderEnabled ? <BellRing size={20} /> : <Bell size={20} />}
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-ink flex items-center gap-2">
+              Daily Spaced Repetition Reminders
+              {reminderEnabled && <Pill tone="teal">Active</Pill>}
+            </h3>
+            <p className="text-xs text-ink-soft">
+              {reminderEnabled
+                ? "Browser notifications active. You'll receive daily alerts when FSRS flashcards are due."
+                : "Stay on pace for board day. Get daily reminder alerts when flashcards need review."}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleToggleReminder}
+            className={`text-xs font-bold px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 ${
+              reminderEnabled
+                ? "bg-lav hover:bg-lav-deep text-ink-soft"
+                : "bg-rosetext text-white hover:bg-rosetext/90 shadow-xs"
+            }`}
+          >
+            {reminderEnabled ? (
+              <>
+                <BellOff size={14} /> Mute alerts
+              </>
+            ) : (
+              <>
+                <Bell size={14} /> Enable study alerts
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* Document Hub Showcase / Onboarding */}
       <Card className="p-8 md:p-10">
+
         <div className="flex flex-wrap items-center justify-between gap-6">
           <div className="max-w-xl">
             <Pill tone="indigo">Document Hub & AI Assistant</Pill>

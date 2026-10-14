@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { getDefaultExamDate } from "../lib/planner";
+import { validatePassword } from "../lib/auth-validation";
 
 export interface UserProfile {
   id: string;
@@ -128,6 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     targetExam: "NCLEX-RN" | "NLE",
     examDate: string = getDefaultExamDate()
   ) => {
+    const validation = validatePassword(password);
+    if (!validation.isValid) {
+      return {
+        error: `Password is too weak. Requirements: ${validation.errors.join(", ")}.`,
+      };
+    }
+
     if (!isSupabaseConfigured) {
       // Mock signup for local offline development
       const mockProfile: UserProfile = {

@@ -1,0 +1,25 @@
+{
+  "name": "Real Nurse: AI Board Exam Reviewer",
+  "short_name": "Real Nurse",
+  "description": "AI-powered Philippine NLE & US NCLEX-RN licensure review platform with FSRS spaced repetition, grounded document study, and realistic mock exams.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fff8fb",
+  "theme_color": "#a8325c",
+  "orientation": "portrait-primary",
+  "categories": ["education", "medical", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
