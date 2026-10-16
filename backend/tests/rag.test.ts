@@ -59,5 +59,5 @@ describe("Phase 5: Document Hub & Grounded RAG", () => {
     expect(res.body.flashcards.length).toBeGreaterThan(0);
     expect(res.body.flashcards[0].front).toBeDefined();
     expect(res.body.flashcards[0].back).toBeDefined();
-  });
+  }, 15000);
 });

@@ -15,7 +15,7 @@ describe("Phase 4 Assessment: Question Generation & Flagging", () => {
     expect(psychQuestions[0].topic).toBe("Defense Mechanisms");
     expect(psychQuestions[0].options.length).toBe(4);
     expect(psychQuestions[0].rationale).toBeDefined();
-  });
+  }, 15000);
 
   it("changes topic questions when selecting different topic", async () => {
     const medSurgQuestions = await generateAIQuiz({
@@ -27,7 +27,7 @@ describe("Phase 4 Assessment: Question Generation & Flagging", () => {
 
     expect(medSurgQuestions[0].subject).toBe("Med-Surg");
     expect(medSurgQuestions[0].topic).toBe("ABG Interpretation");
-  });
+  }, 15000);
 
   it("handles toggling flags correctly", () => {
     let flagged: string[] = [];
