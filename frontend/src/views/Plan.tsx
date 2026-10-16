@@ -48,6 +48,11 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
     return saved ? JSON.parse(saved) : {};
   });
 
+  // Plan Activation toggle (defaults to false for new users so calendar starts clean)
+  const [isPlanActive, setIsPlanActive] = useState<boolean>(() => {
+    return localStorage.getItem("real_nurse_plan_active") === "true";
+  });
+
   // Calendar view navigation
   const [currentMonth, setCurrentMonth] = useState(() => {
     const d = new Date();
@@ -66,10 +71,32 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
   // Modal toggle for custom plan options
   const [showConfigModal, setShowConfigModal] = useState(false);
 
-  // Generate backward schedule
+  // Generate backward schedule only when activated by user
   const studyPlan = useMemo(() => {
+    if (!isPlanActive) {
+      // Clean slate: only explicit user manual overrides if any
+      const manualOnly: Record<string, DaySchedule> = {};
+      for (const [dateStr, kind] of Object.entries(overrides)) {
+        manualOnly[dateStr] = {
+          dateStr,
+          dayNumber: parseInt(dateStr.split("-")[2], 10) || 1,
+          kind,
+          subject: kind === "Rest" ? "Rest & Recovery" : "Self-Scheduled Review",
+          topic: kind === "Rest" ? "Memory consolidation" : "Custom Focus Area",
+          targetMinutes: kind === "Rest" ? 0 : config.hoursPerDay * 60,
+          activities: [
+            kind === "Rest"
+              ? "Recharge and consolidate memory"
+              : `Focus session: ${kind}`,
+          ],
+          isExamDay: dateStr === config.examDate,
+          isRescheduled: true,
+        };
+      }
+      return manualOnly;
+    }
     return generateStudyPlan(config, new Date(), overrides);
-  }, [config, overrides]);
+  }, [config, overrides, isPlanActive]);
 
   const saveConfig = (newConfig: PlannerConfig) => {
     setConfig(newConfig);
@@ -81,6 +108,11 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
     localStorage.setItem("real_nurse_planner_overrides", JSON.stringify(newOverrides));
   };
 
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
   // Month grid calculations
   const year = currentMonth.getFullYear();
   const monthIdx = currentMonth.getMonth();
@@ -88,17 +120,8 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
   const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
   const cells = [...Array(firstDayOfWeek).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
 
-  // Active selected day schedule
-  const selectedDaySchedule: DaySchedule | undefined = studyPlan[selectedDateStr] || {
-    dateStr: selectedDateStr,
-    dayNumber: parseInt(selectedDateStr.split("-")[2], 10) || 1,
-    kind: "Reading",
-    subject: "Pharmacology",
-    topic: "Clinical Concepts",
-    targetMinutes: config.hoursPerDay * 60,
-    activities: ["Spaced review and reading"],
-    isExamDay: false,
-  };
+  // Active selected day schedule (undefined if no activity scheduled yet)
+  const selectedDaySchedule: DaySchedule | undefined = studyPlan[selectedDateStr];
 
   const examDateObj = new Date(config.examDate + "T00:00:00");
   const selectedDateObj = new Date(selectedDateStr + "T00:00:00");
@@ -130,9 +153,35 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
         title="Study Plan & Calendar"
         sub="Your personal review roadmap engineered backward from exam day. Custom tailored to your daily available hours and weak subjects."
         action={
-          <Btn onClick={() => setShowConfigModal(true)} variant="soft" className="flex items-center gap-2">
-            <Settings2 size={16} /> Customize Schedule
-          </Btn>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isPlanActive ? (
+              <Btn
+                onClick={() => {
+                  setIsPlanActive(true);
+                  localStorage.setItem("real_nurse_plan_active", "true");
+                }}
+                className="flex items-center gap-2 text-xs font-bold shadow-sm"
+              >
+                <Sparkles size={15} /> Generate Study Roadmap
+              </Btn>
+            ) : (
+              <button
+                onClick={() => {
+                  if (confirm("Are you sure you want to clear your study calendar back to an unmarked slate?")) {
+                    setIsPlanActive(false);
+                    localStorage.removeItem("real_nurse_plan_active");
+                    saveOverrides({});
+                  }
+                }}
+                className="px-3 py-2 rounded-xl text-xs font-semibold text-ink-soft hover:text-danger hover:bg-lav transition-colors flex items-center gap-1.5 border border-line"
+              >
+                <RotateCcw size={14} /> Clear Calendar
+              </button>
+            )}
+            <Btn onClick={() => setShowConfigModal(true)} variant="soft" className="flex items-center gap-2 text-xs">
+              <Settings2 size={16} /> Customize Schedule
+            </Btn>
+          </div>
         }
       />
 
@@ -186,31 +235,40 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
 
               const isSelected = selectedDateStr === cellDateStr;
               const isExam = cellDateStr === config.examDate;
-              const kind = daySchedule?.kind || "Reading";
+              const isToday = cellDateStr === todayStr;
+              const hasSchedule = Boolean(daySchedule);
+              const kind = daySchedule?.kind;
               const isRescheduled = daySchedule?.isRescheduled;
+
+              let cellStyle = "bg-canvas text-ink-soft hover:bg-lav hover:text-ink border border-transparent";
+              if (isExam) {
+                cellStyle = "bg-danger text-white ring-2 ring-danger font-bold";
+              } else if (isSelected) {
+                cellStyle = "bg-teal text-ink ring-2 ring-rosetext/80 shadow-md scale-105 z-10 font-bold";
+              } else if (hasSchedule && kind) {
+                cellStyle = `${KIND_TONES[kind]} hover:ring-2 hover:ring-teal/50 font-semibold`;
+              } else if (isToday) {
+                cellStyle = "bg-white border-2 border-rosetext/70 text-rosetext font-bold";
+              }
 
               return (
                 <button
                   key={i}
                   onClick={() => setSelectedDateStr(cellDateStr)}
-                  className={`aspect-square rounded-2xl text-xs sm:text-sm font-semibold flex flex-col items-center justify-center relative transition-all ${
-                    isExam
-                      ? "bg-danger text-white ring-2 ring-danger"
-                      : isSelected
-                      ? "bg-teal text-ink ring-2 ring-rosetext/80 shadow-md scale-105 z-10"
-                      : `${KIND_TONES[kind]} hover:ring-2 hover:ring-teal/50`
-                  }`}
+                  className={`aspect-square rounded-2xl text-xs sm:text-sm flex flex-col items-center justify-center relative transition-all ${cellStyle}`}
                 >
                   <span className="font-bold">{d}</span>
                   {isExam ? (
                     <span className="text-[8px] uppercase tracking-wider font-extrabold mt-0.5">EXAM</span>
-                  ) : (
-                    <span className="text-[9px] opacity-75 truncate max-w-[90%] font-medium">
+                  ) : hasSchedule && kind ? (
+                    <span className="text-[9px] opacity-80 truncate max-w-[90%] font-medium">
                       {kind === "Practice test" ? "Test" : kind === "Mock exam" ? "Mock" : kind}
                     </span>
-                  )}
+                  ) : isToday ? (
+                    <span className="text-[8px] uppercase tracking-wider font-extrabold text-rosetext mt-0.5">TODAY</span>
+                  ) : null}
                   {isRescheduled && (
-                    <span className="absolute top-1 right-1.5 size-1.5 rounded-full bg-indigo" title="Custom rescheduled" />
+                    <span className="absolute top-1 right-1.5 size-1.5 rounded-full bg-indigo" title="Custom scheduled" />
                   )}
                 </button>
               );
@@ -218,43 +276,62 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
           </div>
 
           {/* Legend */}
-          <div className="mt-8 pt-6 border-t border-line flex flex-wrap gap-2.5">
-            {(Object.keys(KIND_TONES) as StudyDayKind[]).map((k) => (
-              <span key={k} className={`rounded-full px-3 py-1 text-xs font-semibold ${KIND_TONES[k]}`}>
-                {k}
+          <div className="mt-8 pt-6 border-t border-line flex flex-wrap gap-2.5 items-center justify-between">
+            <div className="flex flex-wrap gap-2.5">
+              {(Object.keys(KIND_TONES) as StudyDayKind[]).map((k) => (
+                <span key={k} className={`rounded-full px-3 py-1 text-xs font-semibold ${KIND_TONES[k]}`}>
+                  {k}
+                </span>
+              ))}
+            </div>
+            {!isPlanActive && (
+              <span className="text-xs text-ink-soft italic">
+                Calendar is clean. Click &quot;Generate Study Roadmap&quot; anytime to populate days.
               </span>
-            ))}
+            )}
           </div>
         </Card>
 
         {/* Right Detail & Reschedule Inspector */}
-        <Card className="p-6 md:p-8 flex flex-col justify-between h-fit">
+        <Card className="p-6 md:p-8 flex flex-col justify-between h-fit min-h-[460px]">
           <div>
             <div className="flex items-center justify-between">
               <p className="text-xs font-bold uppercase tracking-wider text-rosetext">
                 {selectedDateObj.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
               </p>
-              <Pill tone={selectedDaySchedule.kind === "Rest" ? "lav" : "teal"}>
-                {selectedDaySchedule.kind}
-              </Pill>
+              {selectedDaySchedule ? (
+                <Pill tone={selectedDaySchedule.kind === "Rest" ? "lav" : "teal"}>
+                  {selectedDaySchedule.kind}
+                </Pill>
+              ) : (
+                <Pill tone="lav">Clean Day</Pill>
+              )}
             </div>
 
             <h2 className="mt-3 text-2xl font-bold font-display leading-snug">
-              {selectedDaySchedule.isExamDay
+              {selectedDateStr === config.examDate
                 ? "Official Board Exam Day"
-                : `${selectedDaySchedule.subject}`}
+                : selectedDaySchedule
+                ? selectedDaySchedule.subject
+                : "No Study Session Scheduled"}
             </h2>
 
-            {!selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" && (
+            {selectedDaySchedule && !selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" && (
               <p className="text-xs font-semibold text-rosetext mt-1">
                 Topic Focus: {selectedDaySchedule.topic}
+              </p>
+            )}
+
+            {!selectedDaySchedule && selectedDateStr !== config.examDate && (
+              <p className="text-xs text-ink-soft mt-1">
+                This day has no assigned curriculum yet. You can schedule an activity below or generate an automated study roadmap.
               </p>
             )}
 
             <div className="mt-3 flex items-center gap-3 text-xs text-ink-soft">
               <span className="flex items-center gap-1 font-semibold">
                 <Clock size={13} className="text-rosetext" />
-                {selectedDaySchedule.targetMinutes} minutes planned
+                {selectedDaySchedule ? `${selectedDaySchedule.targetMinutes} minutes planned` : "0 minutes planned"}
               </span>
               <span>·</span>
               <span className="font-semibold text-rosetext">
@@ -262,22 +339,34 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
               </span>
             </div>
 
-            {/* Curriculum Activities */}
-            <div className="mt-6 space-y-2.5">
-              <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Scheduled Curriculum</p>
-              {selectedDaySchedule.activities.map((act, idx) => (
-                <div key={idx} className="p-3.5 rounded-2xl bg-canvas border border-line flex items-start gap-3">
-                  <CheckCircle2 size={16} className="text-rosetext shrink-0 mt-0.5" />
-                  <span className="text-xs font-medium leading-relaxed text-ink">{act}</span>
+            {/* Curriculum Activities or Clean Prompt */}
+            {selectedDaySchedule ? (
+              <div className="mt-6 space-y-2.5">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Scheduled Curriculum</p>
+                {selectedDaySchedule.activities.map((act, idx) => (
+                  <div key={idx} className="p-3.5 rounded-2xl bg-canvas border border-line flex items-start gap-3">
+                    <CheckCircle2 size={16} className="text-rosetext shrink-0 mt-0.5" />
+                    <span className="text-xs font-medium leading-relaxed text-ink">{act}</span>
+                  </div>
+                ))}
+              </div>
+            ) : selectedDateStr !== config.examDate ? (
+              <div className="mt-6 p-4 rounded-2xl bg-canvas border border-line space-y-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-ink">
+                  <Sparkles size={15} className="text-rosetext" />
+                  <span>Unscheduled Slate</span>
                 </div>
-              ))}
-            </div>
+                <p className="text-xs text-ink-soft">
+                  Click any activity button below to schedule this individual day, or generate a full backward roadmap up to your exam.
+                </p>
+              </div>
+            ) : null}
 
-            {/* Quick Reschedule Options */}
-            {!selectedDaySchedule.isExamDay && (
+            {/* Quick Reschedule / Schedule Options */}
+            {selectedDateStr !== config.examDate && (
               <div className="mt-6 pt-5 border-t border-line">
                 <label className="block text-xs font-semibold text-ink-soft mb-2">
-                  Reschedule This Day:
+                  {selectedDaySchedule ? "Reschedule This Day:" : "Schedule Activity for This Day:"}
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {(["Flashcards", "Reading", "Quiz", "Practice test", "Rest"] as StudyDayKind[]).map((k) => (
@@ -285,7 +374,7 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
                       key={k}
                       onClick={() => handleRescheduleKind(k)}
                       className={`text-xs px-2.5 py-1 rounded-full font-semibold border transition-all ${
-                        selectedDaySchedule.kind === k
+                        selectedDaySchedule?.kind === k
                           ? "bg-teal text-ink border-teal font-bold"
                           : "bg-white text-ink-soft border-line hover:bg-lav"
                       }`}
@@ -299,18 +388,28 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
           </div>
 
           {/* Action Launch Button */}
-          <div className="mt-8 pt-5 border-t border-line flex items-center justify-between gap-3">
-            {!selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" ? (
+          <div className="mt-8 pt-5 border-t border-line flex flex-col gap-2.5">
+            {selectedDaySchedule && !selectedDaySchedule.isExamDay && selectedDaySchedule.kind !== "Rest" ? (
               <Btn
                 onClick={() => launchActivity(selectedDaySchedule.kind)}
                 className="w-full py-3 text-xs font-bold"
               >
                 Launch {selectedDaySchedule.kind} Session <ArrowRight size={14} />
               </Btn>
-            ) : selectedDaySchedule.kind === "Rest" ? (
+            ) : selectedDaySchedule?.kind === "Rest" ? (
               <span className="text-xs font-medium text-ink-soft italic w-full text-center">
                 Rest days are critical for memory consolidation.
               </span>
+            ) : !isPlanActive && selectedDateStr !== config.examDate ? (
+              <Btn
+                onClick={() => {
+                  setIsPlanActive(true);
+                  localStorage.setItem("real_nurse_plan_active", "true");
+                }}
+                className="w-full py-3 text-xs font-bold flex items-center justify-center gap-2"
+              >
+                <Sparkles size={14} /> Generate Smart Study Roadmap
+              </Btn>
             ) : null}
           </div>
         </Card>
@@ -472,12 +571,14 @@ export default function Plan({ go }: { go?: (v: string) => void }) {
 
               <Btn
                 onClick={() => {
+                  setIsPlanActive(true);
+                  localStorage.setItem("real_nurse_plan_active", "true");
                   saveConfig(config);
                   setShowConfigModal(false);
                 }}
                 className="w-full py-3.5 text-xs font-bold mt-2"
               >
-                Regenerate Backward Plan
+                Save & Generate Backward Plan
               </Btn>
             </div>
           </Card>

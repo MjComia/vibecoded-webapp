@@ -61,11 +61,21 @@ const studyHistory: StudyRecord[] = [
   { timestamp: new Date(Date.now() - 86400000 * 0.5).toISOString(), type: "mock", subject: "Full Mock Exam", score: 74, total: 100 },
 ];
 
+const userStudyHistory = new Map<string, StudyRecord[]>();
+
 export class AnalyticsService {
   public static readonly PASSING_THRESHOLD = 75; // PRC Board standard: 75%
   public static readonly MINIMUM_SUBJECT_THRESHOLD = 60; // PRC standard: No rating below 60%
 
-  public static getAnalytics(examType: "NLE" | "NCLEX-RN" = "NLE"): AnalyticsSummary {
+  public static getAnalytics(examType: "NLE" | "NCLEX-RN" = "NLE", userId?: string): AnalyticsSummary {
+    if (userId) {
+      const records = userStudyHistory.get(userId);
+      if (!records || records.length === 0) {
+        return this.getZeroAnalytics(examType);
+      }
+      return this.computeUserAnalytics(records, examType);
+    }
+
     if (examType === "NLE") {
       return this.computeNLEAnalytics();
     } else {
@@ -79,11 +89,234 @@ export class AnalyticsService {
     topic?: string;
     score: number;
     total: number;
+    userId?: string;
   }): void {
-    studyHistory.push({
+    const item: StudyRecord = {
       timestamp: new Date().toISOString(),
-      ...record,
-    });
+      type: record.type,
+      subject: record.subject,
+      topic: record.topic,
+      score: record.score,
+      total: record.total,
+    };
+    studyHistory.push(item);
+    if (record.userId) {
+      if (!userStudyHistory.has(record.userId)) {
+        userStudyHistory.set(record.userId, []);
+      }
+      userStudyHistory.get(record.userId)!.push(item);
+    }
+  }
+
+  public static resetAnalytics(userId?: string): void {
+    if (userId) {
+      userStudyHistory.delete(userId);
+    }
+  }
+
+  public static getZeroAnalytics(examType: "NLE" | "NCLEX-RN" = "NLE"): AnalyticsSummary {
+    const isNLE = examType === "NLE";
+    const partsData: ExamPartMastery[] = isNLE
+      ? [
+          {
+            code: "NLE-PART1",
+            name: "Part I: Foundation of Professional Nursing Practice",
+            shortName: "NP I: Fundamentals & Law",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NP1-T1", subject: "Part I", topic: "RA 9173 (Nursing Act of 2002)", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP1-T2", subject: "Part I", topic: "Code of Ethics & Patient Rights", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP1-T3", subject: "Part I", topic: "Basic Nursing Skills & Asepsis", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP1-T4", subject: "Part I", topic: "Nursing Process & Documentation", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NLE-PART2",
+            name: "Part II: Community Health & Maternal-Child Nursing",
+            shortName: "NP II: CHN & MCN",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NP2-T1", subject: "Part II", topic: "DOH Primary Health Care (PHC)", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP2-T2", subject: "Part II", topic: "Expanded Program on Immunization (EPI)", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP2-T3", subject: "Part II", topic: "Essential Intrapartum & Newborn Care (EENC)", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP2-T4", subject: "Part II", topic: "Communicable Disease Management", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NLE-PART3",
+            name: "Part III: Care of Clients (Oxygenation, Fluid & Electrolytes)",
+            shortName: "NP III: Cardio-Resp & Fluids",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NP3-T1", subject: "Part III", topic: "Fluid Volume Deficit & IV Flow Rates", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP3-T2", subject: "Part III", topic: "Oxygenation & ABG Interpretation", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP3-T3", subject: "Part III", topic: "Myocardial Infarction & Arrhythmias", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP3-T4", subject: "Part III", topic: "Blood Transfusion Reactions", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NLE-PART4",
+            name: "Part IV: Care of Clients (Nutrition, Elimination, Metabolism)",
+            shortName: "NP IV: GI, Renal & Endocrine",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NP4-T1", subject: "Part IV", topic: "Diabetes Mellitus & Insulin Regimens", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP4-T2", subject: "Part IV", topic: "Chronic Kidney Disease & Dialysis", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP4-T3", subject: "Part IV", topic: "GI Bleeding & Peptic Ulcer Disease", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP4-T4", subject: "Part IV", topic: "Chemotherapy & Radiation Oncology", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NLE-PART5",
+            name: "Part V: Care of Clients (Perception, Coordination, Psych)",
+            shortName: "NP V: Neuro & Psychiatric",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NP5-T1", subject: "Part V", topic: "Increased ICP & Stroke Protocols", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP5-T2", subject: "Part V", topic: "Spinal Cord Injury & Autonomic Dysreflexia", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP5-T3", subject: "Part V", topic: "Crisis Intervention & Psych Emergencies", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NP5-T4", subject: "Part V", topic: "Therapeutic Communication", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+        ]
+      : [
+          {
+            code: "NCLEX-SAFE",
+            name: "Safe and Effective Care Environment",
+            shortName: "Management of Care",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NC1-T1", subject: "Safe Care", topic: "Delegation & Prioritization Principles", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NC1-T2", subject: "Safe Care", topic: "Informed Consent & Ethical Practice", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NCLEX-HEALTH",
+            name: "Health Promotion and Maintenance",
+            shortName: "Health Promotion",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NC2-T1", subject: "Health Promotion", topic: "Antepartum Care & Fetal Assessment", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NC2-T2", subject: "Health Promotion", topic: "Developmental Milestones & Immunization", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NCLEX-PSYCH",
+            name: "Psychosocial Integrity",
+            shortName: "Psychosocial",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NC3-T1", subject: "Psychosocial", topic: "Therapeutic Nurse-Client Communication", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NC3-T2", subject: "Psychosocial", topic: "Coping Mechanisms & Substance Use", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NCLEX-PHYS-BASIC",
+            name: "Physiological Integrity: Basic Care and Comfort",
+            shortName: "Basic Care & Comfort",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NC4-T1", subject: "Basic Care", topic: "Mobility & Pressure Injury Prevention", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NC4-T2", subject: "Basic Care", topic: "Enteral Nutrition & Elimination Support", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+          {
+            code: "NCLEX-PHYS-PHARM",
+            name: "Physiological Integrity: Pharmacological & Parenteral Therapies",
+            shortName: "Pharm & Parenteral",
+            masteryPercentage: 0,
+            totalAnswered: 0,
+            status: "borderline",
+            topics: [
+              { code: "NC5-T1", subject: "Pharmacology", topic: "High-Alert Medications & Drip Calculations", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+              { code: "NC5-T2", subject: "Pharmacology", topic: "Adverse Drug Events & Antidotes", masteryPercentage: 0, totalAnswered: 0, correctCount: 0, status: "borderline" },
+            ],
+          },
+        ];
+
+    const radarData = partsData.map((p) => ({
+      subject: p.shortName,
+      score: 0,
+      fullMark: 100,
+    }));
+
+    return {
+      exam: examType,
+      overallReadiness: 0,
+      passingThreshold: this.PASSING_THRESHOLD,
+      minimumSubjectThreshold: this.MINIMUM_SUBJECT_THRESHOLD,
+      passLikelihood: "At Risk",
+      totalQuestionsAnswered: 0,
+      accuracyRate: 0,
+      flashcardsMastered: 0,
+      mockExamHighestScore: 0,
+      studyMinutesTotal: 0,
+      radarData,
+      parts: partsData,
+      weakAreas: [],
+      primaryWeakArea: null,
+      weakDrillRecommendation: null,
+    };
+  }
+
+  private static computeUserAnalytics(records: StudyRecord[], examType: "NLE" | "NCLEX-RN"): AnalyticsSummary {
+    const base = this.getZeroAnalytics(examType);
+    let totalQuestions = 0;
+    let totalCorrect = 0;
+    let highestMock = 0;
+    let flashcards = 0;
+
+    for (const r of records) {
+      if (r.type === "quiz" || r.type === "mock") {
+        totalQuestions += r.total;
+        totalCorrect += r.score;
+      }
+      if (r.type === "mock") {
+        const pct = Math.round((r.score / r.total) * 100);
+        if (pct > highestMock) highestMock = pct;
+      }
+      if (r.type === "srs") {
+        flashcards += r.score;
+      }
+    }
+
+    const accuracyRate = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+    const overallReadiness = accuracyRate;
+    const isPassing = overallReadiness >= this.PASSING_THRESHOLD;
+    const passLikelihood: "Likely to Pass" | "Borderline" | "At Risk" = isPassing
+      ? "Likely to Pass"
+      : overallReadiness >= 70
+      ? "Borderline"
+      : "At Risk";
+
+    return {
+      ...base,
+      overallReadiness,
+      passLikelihood,
+      totalQuestionsAnswered: totalQuestions,
+      accuracyRate,
+      flashcardsMastered: flashcards,
+      mockExamHighestScore: highestMock,
+      studyMinutesTotal: Math.round(totalQuestions * 1.5),
+    };
   }
 
   private static computeNLEAnalytics(): AnalyticsSummary {

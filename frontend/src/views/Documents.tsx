@@ -72,13 +72,28 @@ export default function Documents({ go }: DocumentsProps) {
   // Load initial document list
   useEffect(() => {
     loadDocuments();
-  }, []);
+  }, [user?.id]);
 
   const loadDocuments = async () => {
-    const list = await fetchStudyDocuments();
+    const list = await fetchStudyDocuments(user?.id);
     setDocs(list);
     if (list.length > 0) {
+      setCurIndex(0);
       loadDocDetails(list[0].id);
+      setMsgs([
+        {
+          me: false,
+          text: `👋 Hello! I am your Real Nurse AI Study Tutor. I'm currently loaded with "${list[0].filename}". Ask me anything about this document, and I will cite exact page numbers!`,
+        },
+      ]);
+    } else {
+      setDocDetails(null);
+      setMsgs([
+        {
+          me: false,
+          text: "Welcome to Real Nurse AI Study Hub! Upload your nursing review notes, textbook chapters, or clinical drug cards to ask questions with exact page citations and generate practice drills.",
+        },
+      ]);
     }
   };
 
@@ -119,7 +134,7 @@ export default function Documents({ go }: DocumentsProps) {
     setUploading(true);
     try {
       const newDoc = await uploadStudyDocument(file, user?.id);
-      const updatedList = [newDoc, ...docs];
+      const updatedList = [newDoc, ...docs.filter((d) => d.id !== newDoc.id)];
       setDocs(updatedList);
       setCurIndex(0);
       await loadDocDetails(newDoc.id);
@@ -140,13 +155,20 @@ export default function Documents({ go }: DocumentsProps) {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Are you sure you want to remove this document from your study hub?")) return;
-    await deleteStudyDocument(id);
+    await deleteStudyDocument(id, user?.id);
     const remaining = docs.filter((d) => d.id !== id);
     setDocs(remaining);
     if (remaining.length > 0) {
       handleSelectDoc(0);
     } else {
       setDocDetails(null);
+      setCurIndex(0);
+      setMsgs([
+        {
+          me: false,
+          text: "Document removed. Upload a new nursing textbook or handout to begin a new grounded study session.",
+        },
+      ]);
     }
   };
 
@@ -495,6 +517,24 @@ export default function Documents({ go }: DocumentsProps) {
                   </div>
                 </div>
               )}
+            </Card>
+          )}
+
+          {!currentDoc && (
+            <Card className="p-8 text-center space-y-3.5 border-dashed border-2 border-line">
+              <div className="mx-auto size-12 rounded-2xl bg-teal-tint grid place-items-center text-rosetext">
+                <BookOpen size={24} />
+              </div>
+              <h3 className="text-base font-bold text-ink">No Active Study Document</h3>
+              <p className="text-xs text-ink-soft max-w-md mx-auto leading-relaxed">
+                Upload a nursing chapter or clinical notes on the left (up to 25 MB). The AI tutor will extract its contents, cite exact pages, and generate flashcards or practice questions.
+              </p>
+              <Btn
+                className="text-xs font-bold py-2.5 px-6 mx-auto"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Upload File to Begin
+              </Btn>
             </Card>
           )}
 

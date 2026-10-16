@@ -20,34 +20,40 @@ import {
   Zap,
 } from "lucide-react";
 import { Card, PageHead, Bar, Pill, Btn, Ring } from "../ui";
-import { fetchAnalytics, AnalyticsSummary } from "../lib/api";
+import { fetchAnalytics, resetAnalytics, AnalyticsSummary } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 interface AnalyticsProps {
   go?: (view: string) => void;
 }
 
 export default function Analytics({ go }: AnalyticsProps) {
+  const { user } = useAuth();
   const [exam, setExam] = useState<"NLE" | "NCLEX-RN">("NLE");
   const [data, setData] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadData = () => {
     setLoading(true);
-    fetchAnalytics(exam).then((res) => {
-      if (isMounted) {
-        setData(res);
-        setLoading(false);
-      }
+    fetchAnalytics(exam, user?.id).then((res) => {
+      setData(res);
+      setLoading(false);
     });
-    return () => {
-      isMounted = false;
-    };
-  }, [exam]);
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [exam, user?.id]);
+
+  const handleReset = async () => {
+    if (!confirm("Are you sure you want to reset all your analytics and study attempts back to a clean slate?")) return;
+    await resetAnalytics(user?.id);
+    loadData();
+  };
 
   const handleLaunchPriorityDrill = (subject?: string, topic?: string) => {
-    const targetTopic = topic || data?.primaryWeakArea?.topic || "Fluid Volume Deficit & IV Flow Rates";
-    const targetSubject = subject || data?.primaryWeakArea?.subject || "Med-Surg";
+    const targetTopic = topic || data?.primaryWeakArea?.topic || "Basic Nursing Skills & Infection Control";
+    const targetSubject = subject || data?.primaryWeakArea?.subject || "Part I: Foundation";
 
     sessionStorage.setItem("priority_drill_topic", targetTopic);
     sessionStorage.setItem("priority_drill_subject", targetSubject);
@@ -58,7 +64,9 @@ export default function Analytics({ go }: AnalyticsProps) {
     }
   };
 
-  const readiness = data?.overallReadiness ?? 74;
+  const totalAnswered = data?.totalQuestionsAnswered ?? 0;
+  const isZeroState = totalAnswered === 0;
+  const readiness = data?.overallReadiness ?? 0;
   const passingThreshold = data?.passingThreshold ?? 75;
   const minSubjectThreshold = data?.minimumSubjectThreshold ?? 60;
   const isPassing = readiness >= passingThreshold;
@@ -102,8 +110,38 @@ export default function Analytics({ go }: AnalyticsProps) {
         }
       />
 
-      {/* Primary Weak Area Priority Drill Banner */}
-      {primaryWeak && (
+      {/* Primary Weak Area Priority Drill Banner OR Clean State Banner */}
+      {isZeroState ? (
+        <div className="relative overflow-hidden rounded-3xl bg-lav border border-line p-6 sm:p-8 shadow-xs">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-teal-tint text-rosetext">
+                  <Sparkles size={16} />
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-rosetext">
+                  Diagnostic Calibration
+                </span>
+                <Pill tone="teal">Clean Slate</Pill>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-ink">
+                No Pre-existing Study Data — Ready for Your First Drill
+              </h2>
+              <p className="text-sm text-ink-soft">
+                Your analytics are clean and ready. Take a 10-item diagnostic drill or practice quiz to calibrate your <b>PRC 75% Passing Standard</b> readiness score and identify priority focus areas.
+              </p>
+            </div>
+            <Btn
+              variant="indigo"
+              onClick={() => handleLaunchPriorityDrill()}
+              className="w-full md:w-auto shrink-0 shadow-md py-3 px-6 text-base flex items-center justify-center gap-2"
+            >
+              <Zap size={18} className="text-amber" fill="#ffb86b" />
+              Begin 10-Item Diagnostic Drill
+            </Btn>
+          </div>
+        </div>
+      ) : primaryWeak ? (
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#ffebee] via-[#fff0f3] to-white border border-[#ffcdd2] p-6 sm:p-8 shadow-sm">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="space-y-2 max-w-2xl">
@@ -135,7 +173,7 @@ export default function Analytics({ go }: AnalyticsProps) {
             </Btn>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Top Metric Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
@@ -144,20 +182,20 @@ export default function Analytics({ go }: AnalyticsProps) {
           <Ring
             value={readiness}
             size={88}
-            tone={isPassing ? "#006a6a" : readiness >= 70 ? "#ffb86b" : "#ba1a1a"}
-            label={<span className="text-lg font-bold">{readiness}%</span>}
+            tone={isZeroState ? "#3d4947" : isPassing ? "#006a6a" : readiness >= 70 ? "#ffb86b" : "#ba1a1a"}
+            label={<span className="text-lg font-bold">{isZeroState ? "0%" : `${readiness}%`}</span>}
           />
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-ink-soft">
               Predicted Readiness
             </p>
             <div className="mt-1 flex items-center gap-2">
-              <Pill tone={isPassing ? "teal" : readiness >= 70 ? "amber" : "red"}>
-                {data?.passLikelihood || "Borderline"}
+              <Pill tone={isZeroState ? "lav" : isPassing ? "teal" : readiness >= 70 ? "amber" : "red"}>
+                {isZeroState ? "Diagnostic Needed" : data?.passLikelihood || "Borderline"}
               </Pill>
             </div>
             <p className="text-[11px] text-ink-soft mt-1.5">
-              PRC Threshold: <b className="text-ink">{passingThreshold}% Target</b>
+              {isZeroState ? "Take a drill to calibrate" : <>PRC Threshold: <b className="text-ink">{passingThreshold}% Target</b></>}
             </p>
           </div>
         </Card>
@@ -167,10 +205,10 @@ export default function Analytics({ go }: AnalyticsProps) {
             <Target size={14} className="text-rosetext" /> Total Answered
           </p>
           <p className="mt-3 font-display text-4xl font-bold text-ink">
-            {data?.totalQuestionsAnswered?.toLocaleString() ?? "1,440"}
+            {data?.totalQuestionsAnswered ?? 0}
           </p>
           <p className="mt-2 text-xs text-ink-soft">
-            Accuracy across practice drills: <b className="text-rosetext">{data?.accuracyRate ?? 74}%</b>
+            {isZeroState ? "No practice quizzes submitted yet" : <>Accuracy across drills: <b className="text-rosetext">{data?.accuracyRate ?? 0}%</b></>}
           </p>
         </Card>
 
@@ -179,7 +217,7 @@ export default function Analytics({ go }: AnalyticsProps) {
             <Layers size={14} className="text-teal" /> Flashcards Mastered
           </p>
           <p className="mt-3 font-display text-4xl font-bold text-ink">
-            {data?.flashcardsMastered ?? 184}
+            {data?.flashcardsMastered ?? 0}
           </p>
           <p className="mt-2 text-xs text-ink-soft">
             SRS Stability: <b className="text-teal">FSRS spaced repetition</b>
@@ -191,10 +229,10 @@ export default function Analytics({ go }: AnalyticsProps) {
             <Award size={14} className="text-amber" /> Mock Exam High
           </p>
           <p className="mt-3 font-display text-4xl font-bold text-ink">
-            {data?.mockExamHighestScore ?? 78}%
+            {data?.mockExamHighestScore ? `${data.mockExamHighestScore}%` : "0%"}
           </p>
           <p className="mt-2 text-xs text-ink-soft">
-            Simulated 100-item board exam
+            {data?.mockExamHighestScore ? "Simulated 100-item board exam" : "Complete a full mock exam"}
           </p>
         </Card>
       </div>
@@ -371,33 +409,43 @@ export default function Analytics({ go }: AnalyticsProps) {
           </Btn>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {data?.weakAreas.map((item) => (
-            <div
-              key={item.code}
-              className="p-4 rounded-2xl border border-line bg-white flex flex-col justify-between hover:shadow-sm transition-all"
-            >
-              <div>
-                <div className="flex justify-between items-start gap-2 mb-2">
-                  <Pill tone={item.masteryPercentage < 60 ? "red" : "amber"}>
-                    {item.masteryPercentage}%
-                  </Pill>
-                  <span className="text-[11px] text-ink-soft font-semibold">{item.subject}</span>
+        {(!data?.weakAreas || data.weakAreas.length === 0) ? (
+          <div className="p-8 rounded-2xl border border-line bg-canvas text-center space-y-2">
+            <CheckCircle2 size={28} className="mx-auto text-rosetext opacity-80" />
+            <h4 className="font-bold text-sm text-ink">No Weak Areas Flagged Yet</h4>
+            <p className="text-xs text-ink-soft max-w-md mx-auto">
+              Your analytics will automatically identify and rank topics requiring remediation as you complete quizzes, flashcards, or mock exams.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.weakAreas.map((item) => (
+              <div
+                key={item.code}
+                className="p-4 rounded-2xl border border-line bg-white flex flex-col justify-between hover:shadow-sm transition-all"
+              >
+                <div>
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <Pill tone={item.masteryPercentage < 60 ? "red" : "amber"}>
+                      {item.masteryPercentage}%
+                    </Pill>
+                    <span className="text-[11px] text-ink-soft font-semibold">{item.subject}</span>
+                  </div>
+                  <h4 className="font-bold text-sm text-ink line-clamp-2">{item.topic}</h4>
                 </div>
-                <h4 className="font-bold text-sm text-ink line-clamp-2">{item.topic}</h4>
+                <div className="mt-4 pt-3 border-t border-line flex items-center justify-between text-xs">
+                  <span className="text-ink-soft">{item.totalAnswered} items answered</span>
+                  <button
+                    onClick={() => handleLaunchPriorityDrill(item.subject, item.topic)}
+                    className="font-bold text-rosetext hover:underline flex items-center gap-0.5"
+                  >
+                    Target <ChevronRight size={14} />
+                  </button>
+                </div>
               </div>
-              <div className="mt-4 pt-3 border-t border-line flex items-center justify-between text-xs">
-                <span className="text-ink-soft">{item.totalAnswered} items answered</span>
-                <button
-                  onClick={() => handleLaunchPriorityDrill(item.subject, item.topic)}
-                  className="font-bold text-rosetext hover:underline flex items-center gap-0.5"
-                >
-                  Target <ChevronRight size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

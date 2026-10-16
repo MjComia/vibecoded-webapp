@@ -85,11 +85,12 @@ documentRouter.post("/upload", handleUpload, async (req: Request, res: Response)
 
 /**
  * GET /api/documents
- * List all available study documents
+ * List all available study documents (scoped to user if authenticated)
  */
-documentRouter.get("/", (_req: Request, res: Response) => {
+documentRouter.get("/", (req: Request, res: Response) => {
   try {
-    const docs = RAGService.listDocuments();
+    const userId = (req.query.userId as string) || undefined;
+    const docs = RAGService.listDocuments(userId);
     res.json({
       success: true,
       documents: docs.map((d) => ({
@@ -145,7 +146,8 @@ documentRouter.get("/:id", (req: Request, res: Response) => {
  */
 documentRouter.delete("/:id", (req: Request, res: Response) => {
   try {
-    const removed = RAGService.deleteDocument(req.params.id as string);
+    const userId = (req.query.userId || req.body?.userId) as string | undefined;
+    const removed = RAGService.deleteDocument(req.params.id as string, userId);
     res.json({ success: removed });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

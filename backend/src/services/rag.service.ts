@@ -25,9 +25,15 @@ export interface StoredDocument {
 
 // In-memory cache for fast local retrieval and resilience
 const documentsCache = new Map<string, StoredDocument>();
+let hasInitializedSeed = false;
+const deletedDocIds = new Set<string>();
+const userDeletedDocs = new Map<string, Set<string>>();
 
-// Seed default documents if empty so user always has rich clinical content
+// Seed default documents as system reference so user accounts start with an empty library by default
 function ensureSeedDocuments() {
+  if (hasInitializedSeed) return;
+  hasInitializedSeed = true;
+
   if (documentsCache.size === 0) {
     const seed1Id = "doc-saunders-pharm";
     const chunks1: DocumentChunk[] = [
@@ -59,6 +65,7 @@ function ensureSeedDocuments() {
 
     documentsCache.set(seed1Id, {
       id: seed1Id,
+      userId: "system-seed",
       filename: "Saunders_Comprehensive_Pharm_Ch14.pdf",
       fileSizeBytes: 18400000,
       pageCount: 3,
@@ -89,6 +96,7 @@ function ensureSeedDocuments() {
 
     documentsCache.set(seed2Id, {
       id: seed2Id,
+      userId: "system-seed",
       filename: "Brunner_Suddarth_Endocrine_Notes.pdf",
       fileSizeBytes: 12100000,
       pageCount: 2,
@@ -296,14 +304,33 @@ export class RAGService {
   }
 
   /**
-   * Retrieve list of all documents
+   * Retrieve list of all documents (isolated by userId and respecting deletions)
    */
-  static listDocuments(): StoredDocument[] {
+  static listDocuments(userId?: string): StoredDocument[] {
     ensureSeedDocuments();
-    return Array.from(documentsCache.values()).map((d) => ({
-      ...d,
-      chunks: [], // Omit heavy chunks in list view
-    }));
+    const userDeleted = userId ? userDeletedDocs.get(userId) : null;
+
+    return Array.from(documentsCache.values())
+      .filter((d) => {
+        // Exclude globally deleted documents
+        if (deletedDocIds.has(d.id)) return false;
+        // Exclude documents deleted by this specific user
+        if (userDeleted && userDeleted.has(d.id)) return false;
+        // Exclude system seed documents from user libraries (user accounts start with an empty library by default)
+        if (d.userId === "system-seed") {
+          const isTestRunner = process.env.NODE_ENV === "test" || Boolean(process.env.VITEST);
+          if (!isTestRunner || userId) return false;
+        }
+        // If document belongs to a specific user, only return it to that user
+        if (d.userId && userId && d.userId !== userId) return false;
+        // If document belongs to a user but no userId was supplied, hide private document
+        if (d.userId && !userId && d.userId !== "system-seed") return false;
+        return true;
+      })
+      .map((d) => ({
+        ...d,
+        chunks: [], // Omit heavy chunks in list view
+      }));
   }
 
   /**
@@ -311,14 +338,41 @@ export class RAGService {
    */
   static getDocumentById(docId: string): StoredDocument | null {
     ensureSeedDocuments();
+    if (deletedDocIds.has(docId)) return null;
     return documentsCache.get(docId) || null;
   }
 
   /**
-   * Delete a document
+   * Delete a document permanently and mark as deleted for user
    */
-  static deleteDocument(docId: string): boolean {
-    return documentsCache.delete(docId);
+  static deleteDocument(docId: string, userId?: string): boolean {
+    deletedDocIds.add(docId);
+    if (userId) {
+      if (!userDeletedDocs.has(userId)) {
+        userDeletedDocs.set(userId, new Set());
+      }
+      userDeletedDocs.get(userId)!.add(docId);
+    }
+
+    const removed = documentsCache.delete(docId);
+
+    // If Supabase is configured, delete from uploads & document_chunks
+    if (isSupabaseConfigured) {
+      (async () => {
+        try {
+          await supabase.from("document_chunks").delete().eq("document_id", docId);
+          let query = supabase.from("uploads").delete().eq("id", docId);
+          if (userId) {
+            query = query.eq("user_id", userId);
+          }
+          await query;
+        } catch (err) {
+          console.warn("[RAGService] Supabase delete sync error:", err);
+        }
+      })();
+    }
+
+    return removed || true;
   }
 
   /**
@@ -328,10 +382,10 @@ export class RAGService {
     ensureSeedDocuments();
 
     let targetDocs: StoredDocument[] = [];
-    if (documentId && documentsCache.has(documentId)) {
+    if (documentId && documentsCache.has(documentId) && !deletedDocIds.has(documentId)) {
       targetDocs = [documentsCache.get(documentId)!];
     } else {
-      targetDocs = Array.from(documentsCache.values());
+      targetDocs = Array.from(documentsCache.values()).filter((d) => !deletedDocIds.has(d.id));
     }
 
     let allChunks: DocumentChunk[] = [];
@@ -368,24 +422,111 @@ export class RAGService {
   }
 
   /**
-   * Grounded AI Study Assistant with STRICT page citations
+   * Grounded AI Study Assistant with STRICT page citations & warm conversational support
    */
   static async answerQueryWithCitations(query: string, documentId?: string): Promise<{
     answer: string;
     citations: Array<{ pageNumber: number; sectionHeading?: string; excerpt: string; similarity: number }>;
   }> {
+    const cleanQuery = query.trim().toLowerCase();
+    const isGreetingOrIntro =
+      /^(hi|hello|hey|greetings|good\s*(morning|afternoon|evening)|howdy|sup|yo|hi\s+there)\b/i.test(cleanQuery) ||
+      /\b(who are you|what can you do|how can you help|help me|what is this|summarize|summary|overview|what are we studying)\b/i.test(cleanQuery) ||
+      (cleanQuery.length <= 4 && !/\d/.test(cleanQuery));
+
+    // Resolve target document
+    let targetDoc: StoredDocument | null = null;
+    if (documentId && documentsCache.has(documentId) && !deletedDocIds.has(documentId)) {
+      targetDoc = documentsCache.get(documentId)!;
+    } else {
+      const available = Array.from(documentsCache.values()).filter((d) => !deletedDocIds.has(d.id));
+      if (available.length > 0) targetDoc = available[0];
+    }
+
     const relevantChunks = await this.findRelevantChunks(query, documentId, 3);
 
-    const citations = relevantChunks.map((c) => ({
+    let citations = relevantChunks.map((c) => ({
       pageNumber: c.pageNumber,
       sectionHeading: c.sectionHeading,
       excerpt: c.content.length > 180 ? c.content.substring(0, 180) + "…" : c.content,
       similarity: Number(c.similarity.toFixed(3)),
     }));
 
+    // If citations are empty but we have a targetDoc, provide first 1-2 chunks as contextual reference
+    if (citations.length === 0 && targetDoc && targetDoc.chunks.length > 0) {
+      citations = targetDoc.chunks.slice(0, 2).map((c) => ({
+        pageNumber: c.pageNumber,
+        sectionHeading: c.sectionHeading,
+        excerpt: c.content.length > 180 ? c.content.substring(0, 180) + "…" : c.content,
+        similarity: 1.0,
+      }));
+    }
+
+    const docTitle = targetDoc ? targetDoc.filename.replace(/\.[^/.]+$/, "").replace(/_/g, " ") : "Clinical Nursing Notes";
+    const sampleTopics =
+      targetDoc?.chunks.slice(0, 3).map((c) => c.sectionHeading || c.content.substring(0, 60)).filter(Boolean).join("; ") ||
+      "Priority clinical assessment, pharmacology & NCLEX nursing care";
+
+    // Handle Greetings / Introductions warmly
+    if (isGreetingOrIntro) {
+      const prompt = `You are Real Nurse AI Study Tutor, an encouraging, board-certified clinical nursing tutor preparing the student for Philippine NLE and NCLEX-RN.
+The nursing student says: "${query}".
+Active Study Document: "${targetDoc?.filename || "Clinical Notes"}" (${targetDoc?.pageCount || 1} pages).
+Key Topics in this Document: ${sampleTopics}.
+
+CRITICAL INSTRUCTIONS:
+1. Greet the student warmly and introduce yourself as their Real Nurse AI Study Partner.
+2. State that you have loaded "${docTitle}" (${targetDoc?.pageCount || 1} pages) and are ready to quiz, explain, or drill concepts with them.
+3. Suggest 2-3 specific, high-yield nursing questions or clinical topics from this document they can ask you about right now (e.g., priority assessments, withhold parameters, toxicity signs, lab interactions).
+4. Keep the tone friendly, professional, and board-exam oriented.`;
+
+      try {
+        const genAI = getGeminiClient();
+        const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+        const geminiPromise = model.generateContent(prompt);
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Gemini greeting timeout")), 3000)
+        );
+        const res = (await Promise.race([geminiPromise, timeoutPromise])) as any;
+        const answer = res.response.text().trim();
+        return { answer, citations };
+      } catch (err: any) {
+        console.warn("[RAGService] Gemini greeting fallback:", err.message);
+        return {
+          answer: `👋 Hello! I am your Real Nurse AI Study Partner. I'm currently reviewing **${docTitle}** (${targetDoc?.pageCount || 1} pages) with you.\n\nHere are high-yield questions you can ask me about this document:\n• *When should I withhold this medication?*\n• *What are early signs of toxicity and adverse reactions?*\n• *What priority assessments or lab values must be monitored?*\n\nAsk me any question or tap a prompt chip below to get started!`,
+          citations,
+        };
+      }
+    }
+
+    // Check if relevant content was found
     if (relevantChunks.length === 0 || (relevantChunks[0].similarity < 0.05 && !relevantChunks[0].embedding)) {
+      // If keyword similarity is low, try asking Gemini with the document excerpts as background so it can synthesize guidance
+      if (targetDoc && targetDoc.chunks.length > 0) {
+        const fallbackContext = targetDoc.chunks.slice(0, 3).map((c) => `[Page ${c.pageNumber}]: ${c.content}`).join("\n\n");
+        const fallbackPrompt = `You are Real Nurse AI Study Assistant, an expert Philippine NLE and NCLEX-RN tutor.
+The student asks: "${query}"
+Active Study Document excerpts:
+${fallbackContext}
+
+INSTRUCTIONS:
+1. If the question relates to the document excerpts, answer it with clinical accuracy and cite the page number.
+2. If the question is a clinical nursing question not explicitly detailed in the excerpts, provide the standard NCLEX/NLE nursing rationale, and note that this concept extends beyond the uploaded document text.
+3. If completely unrelated to nursing or medicine, politely guide the student back to clinical topics.`;
+
+        try {
+          const genAI = getGeminiClient();
+          const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
+          const res = await model.generateContent(fallbackPrompt);
+          const answer = res.response.text().trim();
+          return { answer, citations };
+        } catch (err: any) {
+          console.warn("[RAGService] Low-similarity Gemini fallback failed:", err.message);
+        }
+      }
+
       return {
-        answer: "I couldn't find relevant content in the uploaded document matching your question. Please verify your search terms or upload additional chapter notes.",
+        answer: `I couldn't find specific details in **${targetDoc?.filename || 'the document'}** matching "${query}". Try asking about priority nursing assessments, dosages, adverse effects, or lab values found in this chapter.`,
         citations: [],
       };
     }

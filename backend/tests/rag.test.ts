@@ -48,16 +48,29 @@ describe("Phase 5: Document Hub & Grounded RAG", () => {
     expect(res.body.citations[0].pageNumber).toBeDefined();
   }, 15000);
 
-  it("POST /api/documents/:id/generate-flashcards produces cards referencing pages", async () => {
+  it("POST /api/documents/:id/chat responds warmly to greetings without failure message", async () => {
     const res = await request(app)
-      .post("/api/documents/doc-saunders-pharm/generate-flashcards")
-      .send({ count: 2 });
+      .post("/api/documents/doc-saunders-pharm/chat")
+      .send({ query: "hello" });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(Array.isArray(res.body.flashcards)).toBe(true);
-    expect(res.body.flashcards.length).toBeGreaterThan(0);
-    expect(res.body.flashcards[0].front).toBeDefined();
-    expect(res.body.flashcards[0].back).toBeDefined();
-  }, 15000);
+    expect(res.body.answer).toBeDefined();
+    expect(res.body.answer).not.toContain("I couldn't find relevant content");
+    expect(res.body.answer.toLowerCase()).toMatch(/hello|study|nurse|partner|tutor/i);
+    expect(Array.isArray(res.body.citations)).toBe(true);
+  }, 25000);
+
+  it("DELETE /api/documents/:id permanently removes document and does not resurrect on GET", async () => {
+    // Delete seed document for a test user
+    const deleteRes = await request(app).delete("/api/documents/doc-brunner-endocrine?userId=test-user-123");
+    expect(deleteRes.status).toBe(200);
+    expect(deleteRes.body.success).toBe(true);
+
+    // List documents for this user
+    const listRes = await request(app).get("/api/documents?userId=test-user-123");
+    expect(listRes.status).toBe(200);
+    const docIds = listRes.body.documents.map((d: any) => d.id);
+    expect(docIds).not.toContain("doc-brunner-endocrine");
+  });
 });

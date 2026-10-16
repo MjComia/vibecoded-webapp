@@ -17,7 +17,16 @@ describe("Phase 5: Grounded RAG & Document Hub Validation", () => {
     expect(res.citations).toBeDefined();
     expect(res.citations.length).toBeGreaterThan(0);
     expect(res.citations[0].pageNumber).toBeGreaterThan(0);
-  });
+  }, 15000);
+
+  it("askDocumentQuestion handles greetings warmly as AI tutor", async () => {
+    const res = await askDocumentQuestion("doc-saunders-pharm", "hi hello!");
+
+    expect(res.answer).toBeDefined();
+    expect(res.answer).not.toContain("I couldn't find relevant content");
+    expect(res.answer.toLowerCase()).toMatch(/hello|study|nurse|partner|tutor/i);
+    expect(res.citations.length).toBeGreaterThan(0);
+  }, 15000);
 
   it("generateFlashcardsFromDoc returns flashcards referencing document pages", async () => {
     const { generateFlashcardsFromDoc } = await import("../lib/api");
@@ -27,12 +36,12 @@ describe("Phase 5: Grounded RAG & Document Hub Validation", () => {
     expect(cards.length).toBeGreaterThan(0);
     expect(cards[0].front).toBeDefined();
     expect(cards[0].back).toBeDefined();
-  });
+  }, 15000);
 
   it("generateQuizFromDoc synthesizes grounded practice questions", async () => {
     const { generateQuizFromDoc } = await import("../lib/api");
     const questions = await generateQuizFromDoc("doc-saunders-pharm", 2);
 
     expect(Array.isArray(questions)).toBe(true);
-  });
+  }, 15000);
 });
