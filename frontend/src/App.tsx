@@ -60,8 +60,8 @@ function AppContent() {
   const { isRunning: isPomoRunning, formattedTime: pomoTime } = usePomodoro();
   const isOnline = useOnlineStatus();
 
-  const handleOpenAuth = (mode: "signin" | "signup" = "signup") => {
-    setAuthModalMode(mode);
+  const handleOpenAuth = (mode: "signin" | "signup" = "signin") => {
+    setAuthModalMode("signin");
     setShowAuthModal(true);
   };
 
@@ -88,7 +88,7 @@ function AppContent() {
     return (
       <>
         <Landing
-          onGetStarted={() => handleOpenAuth("signup")}
+          onGetStarted={() => handleOpenAuth("signin")}
           onSignIn={() => handleOpenAuth("signin")}
           onTryDemo={handleEnterDemo}
         />
@@ -151,10 +151,10 @@ function AppContent() {
           </span>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => handleOpenAuth("signup")}
+              onClick={() => handleOpenAuth("signin")}
               className="font-bold text-rosetext hover:underline"
             >
-              Create Free Account
+              Sign In (Test Account)
             </button>
             <button
               onClick={handleExitDemo}

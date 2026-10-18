@@ -23,7 +23,7 @@ interface AuthModalProps {
   initialMode?: "signin" | "signup";
 }
 
-export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: AuthModalProps) {
+export default function AuthModal({ isOpen, onClose, initialMode = "signin" }: AuthModalProps) {
   const { signIn, signUp, profile } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
@@ -150,16 +150,11 @@ export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: A
         <div className="flex rounded-full bg-lav p-1 mb-6">
           <button
             type="button"
-            onClick={() => {
-              setMode("signup");
-              setError("");
-              setConfirmPassword("");
-            }}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold transition-all ${
-              mode === "signup" ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"
-            }`}
+            disabled
+            title="Account creation is currently disabled for testing"
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold text-ink-soft/40 cursor-not-allowed bg-transparent"
           >
-            <UserPlus size={14} /> Create Account
+            <UserPlus size={14} /> Create Account (Disabled)
           </button>
           <button
             type="button"
@@ -168,9 +163,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: A
               setError("");
               setConfirmPassword("");
             }}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold transition-all ${
-              mode === "signin" ? "bg-white text-ink shadow-sm" : "text-ink-soft hover:text-ink"
-            }`}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-full text-xs font-semibold transition-all bg-white text-ink shadow-sm"
           >
             <LogIn size={14} /> Sign In
           </button>
@@ -461,7 +454,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: A
 
           <Btn
             type="submit"
-            disabled={loading}
+            disabled={loading || mode === "signup"}
             className="w-full py-3.5 text-sm mt-3"
           >
             {loading ? (
@@ -470,8 +463,8 @@ export default function AuthModal({ isOpen, onClose, initialMode = "signup" }: A
                 Processing...
               </span>
             ) : mode === "signup" ? (
-              <span className="inline-flex items-center gap-2">
-                <Sparkles size={16} /> Begin Review Journey
+              <span className="inline-flex items-center gap-2 text-ink-soft">
+                Registration Disabled for Testing
               </span>
             ) : (
               <span className="inline-flex items-center gap-2">

@@ -130,14 +130,8 @@ export default function Landing({ onGetStarted, onSignIn, onTryDemo }: LandingPr
             >
               Interactive Demo
             </button>
-            <button
-              onClick={onSignIn}
-              className="text-xs sm:text-sm font-bold text-rosetext hover:text-ink px-4 py-2 rounded-full border border-line bg-white hover:bg-lav transition-all"
-            >
-              Sign In
-            </button>
-            <Btn onClick={onGetStarted} className="py-2.5 px-5 text-xs sm:text-sm shadow-sm">
-              Start Free <ArrowRight size={14} />
+            <Btn onClick={onSignIn} className="py-2.5 px-5 text-xs sm:text-sm shadow-sm">
+              Sign In <ArrowRight size={14} />
             </Btn>
           </div>
         </div>
@@ -169,10 +163,10 @@ export default function Landing({ onGetStarted, onSignIn, onTryDemo }: LandingPr
             {/* CTAs */}
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-4">
               <Btn
-                onClick={onGetStarted}
+                onClick={onSignIn}
                 className="w-full sm:w-auto py-3.5 px-8 text-base shadow-md flex items-center justify-center gap-2 font-bold"
               >
-                Create Free Candidate Account <ArrowRight size={16} />
+                Sign In to Candidate Portal <ArrowRight size={16} />
               </Btn>
               <button
                 onClick={onTryDemo}
@@ -482,10 +476,10 @@ export default function Landing({ onGetStarted, onSignIn, onTryDemo }: LandingPr
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Btn
-              onClick={onGetStarted}
+              onClick={onSignIn}
               className="w-full sm:w-auto py-3.5 px-8 text-base bg-teal hover:bg-teal-deep text-ink font-bold shadow-lg"
             >
-              Get Started for Free <ArrowRight size={16} />
+              Sign In to Candidate Portal <ArrowRight size={16} />
             </Btn>
             <button
               onClick={onSignIn}
