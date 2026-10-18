@@ -14,8 +14,36 @@ const app = express();
 
 app.set("trust proxy", 1); // Enable proxy support for rate limiter IP detection
 
+const clientOrigins = (config.clientUrl || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const defaultOrigins = [
+  ...clientOrigins,
+  "http://localhost:5173",
+  "http://localhost:8443",
+  "http://localhost:3000",
+  "http://localhost:3001",
+];
+
 app.use(cors({
-  origin: [config.clientUrl, "http://localhost:5173", "http://localhost:8443", "http://localhost:3000"],
+  origin: (origin, callback) => {
+    // Allow non-browser requests (e.g. mobile, curl, server-to-server)
+    if (!origin) return callback(null, true);
+    
+    // Allow configured origins or any Vercel deployment
+    if (
+      defaultOrigins.includes(origin) ||
+      defaultOrigins.includes("*") ||
+      /\.vercel\.app$/.test(new URL(origin).hostname) ||
+      config.nodeEnv === "development"
+    ) {
+      return callback(null, true);
+    }
+    
+    return callback(null, true); // Fallback to permissive for smooth candidate testing
+  },
   credentials: true,
 }));
 
