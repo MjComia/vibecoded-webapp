@@ -196,7 +196,7 @@ function AppContent() {
               className="text-xs font-semibold px-3 py-1.5 rounded-full bg-lav text-ink flex items-center gap-1.5"
             >
               <UserCircle size={14} />
-              {isGuest ? "Sign In" : profile.full_name.split(" ")[0]}
+              {isGuest ? "Sign In" : (profile.full_name || "Candidate").split(" ")[0]}
             </button>
           </div>
         </header>
@@ -261,10 +261,10 @@ function AppContent() {
                 className="flex items-center gap-2.5 min-w-0 text-left hover:opacity-80 transition-opacity"
               >
                 <div className="size-9 rounded-full bg-lav-deep text-indigo font-display font-bold text-xs grid place-items-center shrink-0">
-                  {profile.full_name.charAt(0)}
+                  {(profile.full_name || "Candidate").charAt(0)}
                 </div>
                 <div className="truncate">
-                  <p className="text-xs font-bold truncate text-ink">{profile.full_name}</p>
+                  <p className="text-xs font-bold truncate text-ink">{profile.full_name || "Candidate"}</p>
                   <p className="text-[10px] text-ink-soft truncate">
                     {!user ? "Demo Mode · Tap to Sign In" : profile.email}
                   </p>

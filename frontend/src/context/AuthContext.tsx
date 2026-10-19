@@ -26,14 +26,14 @@ interface AuthContextType {
   updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
 }
 
-const defaultGuestProfile: UserProfile = {
-  id: "guest-user",
-  email: "sarah@nursing.ph",
-  full_name: "Sarah Jenkins",
+const emptyProfile: UserProfile = {
+  id: "",
+  email: "",
+  full_name: "",
   target_exam: "NCLEX-RN",
   exam_date: getDefaultExamDate(),
   daily_goal_minutes: 60,
-  streak_days: 14,
+  streak_days: 0,
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile>(() => {
     const saved = localStorage.getItem("real_nurse_profile");
-    return saved ? JSON.parse(saved) : defaultGuestProfile;
+    return saved ? JSON.parse(saved) : emptyProfile;
   });
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
+      const savedUser = localStorage.getItem("real_nurse_user");
+      if (savedUser) {
+        try {
+          setUser(JSON.parse(savedUser));
+        } catch {
+          // ignore
+        }
+      }
       setLoading(false);
       return;
     }
@@ -113,8 +121,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (session?.user) {
         fetchProfile(session.user.id, session.user.email ?? "");
       } else {
-        // Reset to guest profile on logout
-        updateLocalProfile(defaultGuestProfile);
+        // Reset to empty profile on logout
+        localStorage.removeItem("real_nurse_profile");
+        updateLocalProfile(emptyProfile);
       }
       setLoading(false);
     });
@@ -138,8 +147,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!isSupabaseConfigured) {
       // Mock signup for local offline development
-      const mockProfile: UserProfile = {
+      const mockUser = {
         id: "offline-" + Date.now(),
+        email,
+        app_metadata: {},
+        user_metadata: { full_name: fullName },
+        aud: "authenticated",
+        created_at: new Date().toISOString(),
+      } as unknown as User;
+      setUser(mockUser);
+      localStorage.setItem("real_nurse_user", JSON.stringify(mockUser));
+      const mockProfile: UserProfile = {
+        id: mockUser.id,
         email,
         full_name: fullName,
         target_exam: targetExam,
@@ -178,7 +197,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateLocalProfile(newProf);
 
       if (data.session) {
-        // User session immediately active
+        setUser(data.user);
+        setSession(data.session);
         await supabase.from("profiles").upsert(newProf).catch(() => {});
         return {};
       } else {
@@ -194,19 +214,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      updateLocalProfile({
-        ...profile,
+      const nameFromEmail = email.split("@")[0] || "Candidate";
+      const displayName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
+      const newProf: UserProfile = {
+        id: "local-user-" + Date.now(),
         email,
-      });
+        full_name: displayName,
+        target_exam: profile.target_exam || "NCLEX-RN",
+        exam_date: profile.exam_date || getDefaultExamDate(),
+        daily_goal_minutes: 60,
+        streak_days: 1,
+      };
+      const mockUser = {
+        id: newProf.id,
+        email,
+        app_metadata: {},
+        user_metadata: { full_name: displayName },
+        aud: "authenticated",
+        created_at: new Date().toISOString(),
+      } as unknown as User;
+      setUser(mockUser);
+      localStorage.setItem("real_nurse_user", JSON.stringify(mockUser));
+      updateLocalProfile(newProf);
       return {};
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) return { error: error.message };
+    if (data?.user) {
+      setUser(data.user);
+      setSession(data.session);
+    }
     return {};
   };
 
@@ -214,7 +256,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (isSupabaseConfigured) {
       await supabase.auth.signOut();
     }
-    updateLocalProfile(defaultGuestProfile);
+    setUser(null);
+    setSession(null);
+    localStorage.removeItem("real_nurse_user");
+    localStorage.removeItem("real_nurse_profile");
+    updateLocalProfile(emptyProfile);
   };
 
   const updateProfile = async (updates: Partial<UserProfile>) => {
